@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | OSNAP Magnet</title>
+    <title>GSD-Lite PRO | Fixed Engine</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
@@ -38,7 +38,7 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v2.3. OSNAP "Magnet" logic active.</div>
+    <div id="terminal">GSD-Lite PRO v2.5. Engine Fixed. Ready.</div>
     <div id="input-area">
         <span class="cmd-label">COMMAND ></span>
         <input type="text" id="cmdInput" autofocus placeholder="L = Line, C = Circle...">
@@ -113,33 +113,33 @@
     function drawCrosshair(coords) {
         const sX = coords.x;
         const sY = cadCanvas.height - coords.y;
-
         ctx.save();
         ctx.setLineDash([4, 4]);
         ctx.strokeStyle = "rgba(255, 0, 0, 0.4)";
         ctx.beginPath(); ctx.moveTo(sX, 0); ctx.lineTo(sX, cadCanvas.height); ctx.stroke();
         ctx.beginPath(); ctx.moveTo(0, sY); ctx.lineTo(cadCanvas.width, sY); ctx.stroke();
         
-        // OSNAP Glyph (The "Magnet" Visual)
         ctx.setLineDash([]);
         ctx.lineWidth = 2;
-        ctx.strokeStyle = "#32cd32"; // AutoCAD Snap Green
+        ctx.strokeStyle = "#32cd32"; 
 
         if (coords.snapType === 'END') {
-            ctx.strokeRect(sX - 6, sY - 6, 12, 12); // Square for Endpoint
+            ctx.strokeRect(sX - 6, sY - 6, 12, 12);
         } else if (coords.snapType === 'MID') {
-            ctx.beginPath(); // Triangle for Midpoint
+            ctx.beginPath();
             ctx.moveTo(sX, sY - 8); ctx.lineTo(sX - 8, sY + 6); ctx.lineTo(sX + 8, sY + 6); ctx.closePath();
             ctx.stroke();
         } else {
             ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
-            ctx.strokeRect(sX - 4, sY - 4, 8, 8); // Normal pickbox
+            ctx.strokeRect(sX - 4, sY - 4, 8, 8);
         }
         ctx.restore();
     }
 
     function refresh() {
         ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+        
+        // 1. Draw Finalized Drawings
         drawings.forEach(d => {
             ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
             ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
@@ -147,19 +147,37 @@
             else { ctx.arc(d.center.x, d.center.y, d.radius, 0, Math.PI * 2); }
             ctx.stroke(); ctx.restore();
         });
+
         const snapped = getCoords(mousePos);
+
+        // 2. Rubber-band Preview
+        if (points.length === 1 && currentMode) {
+            ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
+            ctx.beginPath(); ctx.strokeStyle = "rgba(0, 120, 212, 0.6)";
+            ctx.setLineDash([5, 5]); ctx.lineWidth = 1.5;
+            const p1 = points[0];
+            if (currentMode === 'LINE') {
+                ctx.moveTo(p1.x, p1.y); ctx.lineTo(snapped.x, snapped.y);
+            } else if (currentMode === 'CIRCLE') {
+                const radius = Math.hypot(snapped.x - p1.x, snapped.y - p1.y);
+                ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2);
+            }
+            ctx.stroke(); ctx.restore();
+        }
         drawCrosshair(snapped);
     }
 
     cadCanvas.addEventListener('pointermove', (e) => { mousePos = e; refresh(); });
+
     cadCanvas.addEventListener('pointerdown', (e) => {
         const coords = getCoords(e);
-        if (currentMode === 'LINE' || currentMode === 'CIRCLE') {
+        if (currentMode) {
             points.push(coords);
             if (points.length === 2) {
                 if (currentMode === 'LINE') drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
                 else drawings.push({ type: 'CIRCLE', center: points[0], radius: Math.hypot(points[1].x-points[0].x, points[1].y-points[0].y) });
                 points = [];
+                log(`${currentMode} Created.`);
             }
             refresh();
         }
@@ -169,9 +187,13 @@
         currentMode = mode; points = [];
         log(`${mode} Active.`, "#ffcc00");
         document.querySelectorAll('.toolbar button').forEach(b => {
-            if (b.id === mode.toLowerCase() + 'Btn') b.classList.add('active');
-            else if (!['gridBtn','snapBtn','endBtn','midBtn'].includes(b.id)) b.classList.remove('active');
+            b.classList.toggle('active', b.id === mode.toLowerCase() + 'Btn');
         });
+        // Keep snap buttons active state separate
+        document.getElementById('gridBtn').classList.toggle('active', gridVisible);
+        document.getElementById('snapBtn').classList.toggle('active', snapEnabled);
+        document.getElementById('endBtn').classList.toggle('active', endSnap);
+        document.getElementById('midBtn').classList.toggle('active', midSnap);
     }
 
     document.getElementById('lineBtn').onclick = () => setMode('LINE');
@@ -185,72 +207,9 @@
     input.onkeydown = (e) => { if (e.key === 'Enter') { 
         const cmd = input.value.trim().toUpperCase(); input.value = '';
         if (cmd === 'L') setMode('LINE'); else if (cmd === 'C') setMode('CIRCLE');
-        else if (cmd === 'CLEAR') drawings = []; refresh();
+        else if (cmd === 'CLEAR') { drawings = []; refresh(); }
     }};
     setTimeout(resize, 100);
-
-
-    // ... (keep previous variables)
-
-    function refresh() {
-        ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
-        
-        // 1. Draw all finalized drawings
-        drawings.forEach(d => {
-            ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
-            ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
-            if (d.type === 'LINE') { ctx.moveTo(d.p1.x, d.p1.y); ctx.lineTo(d.p2.x, d.p2.y); }
-            else { ctx.arc(d.center.x, d.center.y, d.radius, 0, Math.PI * 2); }
-            ctx.stroke(); ctx.restore();
-        });
-
-        const snapped = getCoords(mousePos);
-
-        // 2. NEW: Rubber-band Preview
-        if (points.length === 1 && currentMode) {
-            ctx.save(); 
-            ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
-            ctx.beginPath(); 
-            ctx.strokeStyle = "rgba(0, 120, 212, 0.6)"; // Blue preview color
-            ctx.setLineDash([5, 5]); 
-            ctx.lineWidth = 1.5;
-
-            const p1 = points[0];
-            if (currentMode === 'LINE') {
-                ctx.moveTo(p1.x, p1.y);
-                ctx.lineTo(snapped.x, snapped.y);
-            } else if (currentMode === 'CIRCLE') {
-                const radius = Math.hypot(snapped.x - p1.x, snapped.y - p1.y);
-                ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2);
-            }
-            ctx.stroke();
-            ctx.restore();
-        }
-
-        // 3. Draw the Crosshair and Snap Markers
-        drawCrosshair(snapped);
-    }
-
-    // UPDATED Pointerdown to ensure refresh triggers correctly
-    cadCanvas.addEventListener('pointerdown', (e) => {
-        const coords = getCoords(e);
-        if (currentMode === 'LINE' || currentMode === 'CIRCLE') {
-            points.push(coords);
-            if (points.length === 2) {
-                if (currentMode === 'LINE') {
-                    drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
-                } else {
-                    const r = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
-                    drawings.push({ type: 'CIRCLE', center: points[0], radius: r });
-                }
-                points = []; // Reset for next shape
-                log(`${currentMode} Created.`);
-            }
-            refresh();
-        }
-    });
-
-    // ... (rest of the code remains the same)
 </script>
 </body>
 </html>
