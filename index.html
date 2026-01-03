@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v3.5 Fixed</title>
+    <title>GSD-Lite PRO | v3.8 Visual Snap</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
@@ -24,15 +24,14 @@
     <button id="lineBtn">LINE</button>
     <button id="circleBtn">CIRCLE</button>
     <button id="moveBtn" style="background: #6a1b9a;">MOVE</button>
+    <button id="trimBtn" style="background: #c62828;">TRIM</button>
+    <button id="offsetBtn" style="background: #2e7d32;">OFFSET</button>
     <select id="layerSel">
         <option value="0">Layer 0</option>
         <option value="HIDDEN">Hidden</option>
         <option value="DIM">Dimensions</option>
     </select>
-    <select id="unitSel">
-        <option value="1">mm</option>
-        <option value="0.1">cm</option>
-    </select>
+    <select id="unitSel"><option value="1">mm</option><option value="0.1">cm</option></select>
     <button id="gridBtn" class="active">GRID</button>
     <button id="snapBtn">SNAP</button>
     <button id="clearBtn" style="color: #ff6b6b;">CLEAR</button>
@@ -44,26 +43,34 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v3.5. Cursor restored. [Ctrl+Z] Undo.</div>
+    <div id="terminal">GSD-Lite PRO v3.8. Cursor highlights active targets.</div>
     <div id="input-area">
         <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
-        <input type="text" id="cmdInput" autofocus>
+        <input type="text" id="cmdInput" autofocus placeholder="Type command or value...">
     </div>
 </div>
 
 <script>
     const cadCanvas = document.getElementById('cadCanvas'), gridCanvas = document.getElementById('gridCanvas');
     const ctx = cadCanvas.getContext('2d'), gCtx = gridCanvas.getContext('2d');
-    const terminal = document.getElementById('terminal'), layerSel = document.getElementById('layerSel'), unitSel = document.getElementById('unitSel');
+    const terminal = document.getElementById('terminal'), layerSel = document.getElementById('layerSel'), unitSel = document.getElementById('unitSel'), cmdInput = document.getElementById('cmdInput');
 
     let gridVisible = true, snapEnabled = false, shiftPressed = false, currentMode = null;
     let points = [], drawings = [], undoStack = [], mousePos = null;
-    let selectedObj = null, offset = { x: 0, y: 0 };
+    let selectedObj = null, offsetDist = 20, dragOffset = { x: 0, y: 0 };
 
     const LAYERS = { "0": { color: "#000", dash: [] }, "HIDDEN": { color: "#888", dash: [5, 5] }, "DIM": { color: "#f00", dash: [] } };
 
     function saveState() { undoStack.push(JSON.stringify(drawings)); if (undoStack.length > 30) undoStack.shift(); }
     function undo() { if (undoStack.length > 0) { drawings = JSON.parse(undoStack.pop()); log("Undo."); refresh(); } }
+
+    cmdInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const val = parseFloat(cmdInput.value);
+            if (!isNaN(val)) { offsetDist = val; log(`Offset distance: ${val}`); }
+            cmdInput.value = "";
+        }
+    });
 
     window.addEventListener('keydown', (e) => {
         if (e.key === 'Shift') shiftPressed = true;
@@ -112,6 +119,7 @@
     function refresh() {
         ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
         const scale = parseFloat(unitSel.value);
+        const rect = cadCanvas.getBoundingClientRect();
         
         drawings.forEach(d => {
             ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
@@ -125,17 +133,26 @@
         if (!mousePos) return;
         const cur = getCoords(mousePos, points[0]);
 
-        // Crosshair Cursor
-        ctx.beginPath(); ctx.strokeStyle = "rgba(0,0,0,0.2)"; ctx.setLineDash([]);
-        ctx.moveTo(mousePos.clientX - cadCanvas.getBoundingClientRect().left, 0); ctx.lineTo(mousePos.clientX - cadCanvas.getBoundingClientRect().left, cadCanvas.height);
-        ctx.moveTo(0, mousePos.clientY - cadCanvas.getBoundingClientRect().top); ctx.lineTo(cadCanvas.width, mousePos.clientY - cadCanvas.getBoundingClientRect().top);
+        // HIT DETECTION for Cursor Color
+        let isHovering = drawings.some(d => {
+            if (d.type === 'CIRCLE') return Math.abs(Math.hypot(cur.x-d.center.x, cur.y-d.center.y) - d.radius) < 10;
+            const l = Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y);
+            return (Math.hypot(cur.x-d.p1.x, cur.y-d.p1.y) + Math.hypot(cur.x-d.p2.x, cur.y-d.p2.y)) < l + 5;
+        });
+
+        // Cursor UI
+        ctx.beginPath(); 
+        ctx.strokeStyle = isHovering ? "#00ff00" : "rgba(0,0,0,0.15)";
+        ctx.lineWidth = isHovering ? 2 : 1;
+        ctx.moveTo(mousePos.clientX - rect.left, 0); ctx.lineTo(mousePos.clientX - rect.left, cadCanvas.height);
+        ctx.moveTo(0, mousePos.clientY - rect.top); ctx.lineTo(cadCanvas.width, mousePos.clientY - rect.top);
         ctx.stroke();
 
-        if (selectedObj) {
-            const dx = cur.x - offset.x, dy = cur.y - offset.y;
+        if (selectedObj && currentMode === 'MOVE') {
+            const dx = cur.x - dragOffset.x, dy = cur.y - dragOffset.y;
             if (selectedObj.type === 'LINE') { selectedObj.p1.x += dx; selectedObj.p1.y += dy; selectedObj.p2.x += dx; selectedObj.p2.y += dy; }
             else { selectedObj.center.x += dx; selectedObj.center.y += dy; }
-            offset = cur;
+            dragOffset = cur;
         }
 
         if (points.length > 0 && currentMode) {
@@ -151,23 +168,40 @@
                 label = `R: ${(r * scale).toFixed(2)}`;
             }
             ctx.stroke(); ctx.restore();
-            ctx.fillStyle = "black"; ctx.font = "bold 13px Segoe UI";
-            ctx.fillText(label, mousePos.clientX - cadCanvas.getBoundingClientRect().left + 10, mousePos.clientY - cadCanvas.getBoundingClientRect().top - 10);
+            ctx.fillStyle = isHovering ? "#008000" : "black"; 
+            ctx.font = "bold 13px Segoe UI";
+            ctx.fillText(label, mousePos.clientX - rect.left + 15, mousePos.clientY - rect.top - 15);
         }
     }
 
     cadCanvas.addEventListener('pointermove', (e) => { mousePos = e; refresh(); });
     cadCanvas.addEventListener('pointerdown', (e) => {
         const c = getCoords(e, points[0]);
-        if (currentMode === 'MOVE') {
+        if (currentMode === 'OFFSET') {
+            const target = drawings.find(d => {
+                if (d.type === 'CIRCLE') return Math.abs(Math.hypot(c.x-d.center.x, c.y-d.center.y) - d.radius) < 10;
+                return (Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y)) < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 5;
+            });
+            if (target) {
+                saveState(); let newObj = JSON.parse(JSON.stringify(target));
+                if (target.type === 'LINE') {
+                    const dx = target.p2.x - target.p1.x, dy = target.p2.y - target.p1.y, len = Math.hypot(dx, dy);
+                    const nx = -dy / len * offsetDist, ny = dx / len * offsetDist;
+                    newObj.p1.x += nx; newObj.p1.y += ny; newObj.p2.x += nx; newObj.p2.y += ny;
+                } else { newObj.radius += offsetDist; }
+                drawings.push(newObj); log("Offset created.");
+            }
+        } else if (currentMode === 'TRIM') {
+            const target = drawings.find(d => d.type === 'LINE' && (Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y)) < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 5);
+            if (target) { saveState(); drawings = drawings.filter(d => d !== target); log("Trimmed."); }
+        } else if (currentMode === 'MOVE') {
             if (selectedObj) { selectedObj = null; log("Placed."); }
             else {
                 selectedObj = drawings.find(d => {
                     if (d.type === 'CIRCLE') return Math.hypot(c.x-d.center.x, c.y-d.center.y) < d.radius + 10;
-                    const dSum = Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y);
-                    return dSum < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 2;
+                    return (Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y)) < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 5;
                 });
-                if (selectedObj) { saveState(); offset = c; log("Selected."); }
+                if (selectedObj) { saveState(); dragOffset = c; log("Selected."); }
             }
         } else if (currentMode) {
             points.push(c);
@@ -183,6 +217,9 @@
     document.getElementById('lineBtn').onclick = function() { currentMode = 'LINE'; setAct(this); };
     document.getElementById('circleBtn').onclick = function() { currentMode = 'CIRCLE'; setAct(this); };
     document.getElementById('moveBtn').onclick = function() { currentMode = 'MOVE'; setAct(this); };
+    document.getElementById('trimBtn').onclick = function() { currentMode = 'TRIM'; setAct(this); };
+    document.getElementById('offsetBtn').onclick = function() { currentMode = 'OFFSET'; setAct(this); log("Input offset distance."); };
+    
     function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); points = []; selectedObj = null; }
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); refresh(); };
     document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
