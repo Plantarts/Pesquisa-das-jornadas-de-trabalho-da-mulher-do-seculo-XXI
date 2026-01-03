@@ -3,15 +3,15 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite Web CAD</title>
+    <title>GSD-Lite Web CAD Pro</title>
     <style>
-        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f4f4f4; margin: 0; display: flex; flex-direction: column; height: 100vh; }
-        #canvas-container { flex-grow: 1; background: #fff; border-bottom: 2px solid #ccc; position: relative; overflow: hidden; }
-        canvas { display: block; background-color: #ffffff; cursor: crosshair; }
-        #terminal { height: 150px; background: #1e1e1e; color: #00ff00; padding: 10px; font-family: monospace; overflow-y: auto; font-size: 14px; }
-        #input-area { background: #333; padding: 10px; display: flex; }
-        input { flex-grow: 1; background: #000; color: #00ff00; border: none; padding: 10px; font-family: monospace; outline: none; }
-        .label { color: #aaa; padding-right: 10px; font-family: monospace; align-self: center; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2b2b2b; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        #canvas-container { flex-grow: 1; background: #ffffff; position: relative; cursor: crosshair; }
+        canvas { display: block; }
+        #terminal { height: 120px; background: #121212; color: #00ff00; padding: 12px; font-family: 'Consolas', monospace; overflow-y: auto; border-top: 2px solid #444; font-size: 13px; line-height: 1.5; }
+        #input-area { background: #1e1e1e; padding: 8px 15px; display: flex; align-items: center; border-top: 1px solid #333; }
+        input { flex-grow: 1; background: transparent; color: #fff; border: none; padding: 5px; font-family: 'Consolas', monospace; outline: none; font-size: 16px; }
+        .label { color: #00aaff; font-weight: bold; margin-right: 10px; font-family: sans-serif; font-size: 12px; }
     </style>
 </head>
 <body>
@@ -20,11 +20,11 @@
     <canvas id="cadCanvas"></canvas>
 </div>
 
-<div id="terminal">GSD-Lite CAD Initialized...<br>Commands: L (x1 y1 x2 y2), C (cx cy r), CLEAR</div>
+<div id="terminal">GSD-Lite PRO Initialized. <br>Type 'L' for Line, 'C' for Circle, or click to draw.</div>
 
 <div id="input-area">
-    <span class="label">COMMAND:</span>
-    <input type="text" id="cmdInput" autofocus autofocus placeholder="Type command and press Enter">
+    <span class="label">COMMAND ></span>
+    <input type="text" id="cmdInput" autofocus placeholder="Type command...">
 </div>
 
 <script>
@@ -33,45 +33,81 @@
     const terminal = document.getElementById('terminal');
     const input = document.getElementById('cmdInput');
 
-    // Resize canvas to fill container
+    let currentMode = null; 
+    let points = [];
+
     function resize() {
-        canvas.width = canvas.parentElement.clientWidth;
-        canvas.height = canvas.parentElement.clientHeight;
-        ctx.translate(0, canvas.height); // Flip Y axis to match Cartesian
-        ctx.scale(1, -1);
+        canvas.width = window.innerWidth;
+        canvas.height = window.innerHeight - 150; // Adjust for terminal height
     }
     window.addEventListener('resize', resize);
     resize();
 
-    function log(msg) { terminal.innerHTML += `<br>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
+    function log(msg, color = "#00ff00") {
+        terminal.innerHTML += `<br><span style="color:${color}">>> ${msg}</span>`;
+        terminal.scrollTop = terminal.scrollHeight;
+    }
+
+    // Convert screen clicks to Cartesian-style coordinates
+    function getCoords(e) {
+        const rect = canvas.getBoundingClientRect();
+        const x = e.clientX - rect.left;
+        const y = canvas.height - (e.clientY - rect.top);
+        return { x, y };
+    }
+
+    canvas.addEventListener('mousedown', (e) => {
+        const coords = getCoords(e);
+        
+        if (currentMode === 'LINE') {
+            points.push(coords);
+            if (points.length === 1) {
+                log("Specify next point:", "#00aaff");
+            } else if (points.length === 2) {
+                drawLine(points[0], points[1]);
+                points = []; // Reset for next line
+                log("Line created. Specify start point or press ESC to exit.");
+            }
+        }
+    });
+
+    function drawLine(p1, p2) {
+        ctx.save();
+        ctx.translate(0, canvas.height);
+        ctx.scale(1, -1);
+        ctx.beginPath();
+        ctx.moveTo(p1.x, p1.y);
+        ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = "#000";
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        ctx.restore();
+    }
 
     input.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const raw = input.value.trim().toUpperCase();
-            const parts = raw.split(' ');
-            const cmd = parts[0];
-            const args = parts.slice(1).map(Number);
-            
-            if (cmd === 'L' && args.length === 4) {
-                ctx.beginPath();
-                ctx.moveTo(args[0], args[1]);
-                ctx.lineTo(args[2], args[3]);
-                ctx.stroke();
-                log(`Line: (${args[0]},${args[1]}) to (${args[2]},${args[3]})`);
-            } else if (cmd === 'C' && args.length === 3) {
-                ctx.beginPath();
-                ctx.arc(args[0], args[1], args[2], 0, 2 * Math.PI);
-                ctx.stroke();
-                log(`Circle: Center(${args[0]},${args[1]}) Radius ${args[2]}`);
-            } else if (cmd === 'CLEAR') {
-                ctx.setTransform(1, 0, 0, 1, 0, 0);
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                resize();
-                log("Canvas Cleared");
-            } else {
-                log("Invalid Command syntax.");
-            }
             input.value = '';
+
+            if (raw === 'L') {
+                currentMode = 'LINE';
+                points = [];
+                log("LINE Command Active: Click on canvas or type coords (x1 y1 x2 y2)", "#ffcc00");
+            } else if (raw === 'C') {
+                log("CIRCLE Command selected. (Manual click support coming soon)");
+            } else if (raw === 'CLEAR') {
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                log("Canvas Cleared.");
+            } else if (raw.startsWith('L ')) {
+                // Support for direct coordinate entry: L 0 0 100 100
+                const args = raw.split(' ').slice(1).map(Number);
+                if (args.length === 4) drawLine({x:args[0], y:args[1]}, {x:args[2], y:args[3]});
+            }
+        }
+        if (e.key === 'Escape') {
+            currentMode = null;
+            points = [];
+            log("Command Cancelled.");
         }
     });
 </script>
