@@ -3,31 +3,16 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | Touch-Optimized CAD</title>
+    <title>GSD-Lite PRO | OSNAP Magnet</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
-        
-        .toolbar { 
-            position: fixed; top: 10px; left: 10px; z-index: 1000;
-            display: flex; flex-wrap: wrap; gap: 8px; 
-            background: rgba(30, 30, 30, 0.95); padding: 10px; border-radius: 8px;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #444;
-        }
-
-        button { 
-            background: #3c3c3c; color: white; border: 1px solid #555; 
-            padding: 10px 14px; cursor: pointer; border-radius: 4px; 
-            display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600;
-            transition: 0.2s; -webkit-tap-highlight-color: transparent;
-        }
+        .toolbar { position: fixed; top: 10px; left: 10px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; background: rgba(30, 30, 30, 0.95); padding: 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #444; }
+        button { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; -webkit-tap-highlight-color: transparent; }
         button svg { width: 14px; height: 14px; fill: none; stroke: currentColor; stroke-width: 2.5; pointer-events: none; }
         button.active { background: var(--accent); border-color: #00aaff; box-shadow: 0 0 10px rgba(0,170,255,0.5); }
-        
         #canvas-container { flex-grow: 1; position: relative; background: #ffffff; width: 100vw; height: calc(100vh - 140px); }
-        /* touch-action: none is critical for mobile drawing */
-        canvas { position: absolute; top: 0; left: 0; cursor: crosshair; touch-action: none; }
-
+        canvas { position: absolute; top: 0; left: 0; cursor: none; touch-action: none; }
         #bottom-panel { height: 140px; display: flex; flex-direction: column; z-index: 100; }
         #terminal { flex-grow: 1; background: #121212; color: #00ff00; padding: 10px; font-family: 'Consolas', monospace; overflow-y: auto; font-size: 13px; border-top: 2px solid #444; }
         #input-area { background: var(--panel); padding: 10px 15px; display: flex; align-items: center; border-top: 1px solid #333; }
@@ -37,13 +22,13 @@
 </head>
 <body>
 
-<div class="toolbar" id="mainToolbar">
+<div class="toolbar">
     <button id="lineBtn"><svg viewBox="0 0 24 24"><line x1="3" y1="21" x2="21" y2="3"></line></svg> LINE</button>
     <button id="circleBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"></circle></svg> CIRCLE</button>
     <button id="gridBtn" class="active"><svg viewBox="0 0 24 24"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"></path></svg> GRID</button>
     <button id="snapBtn"><svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2" fill="currentColor"></circle><path d="M12 3v3m0 12v3M3 12h3m12 0h3"></path></svg> SNAP</button>
-    <button id="endBtn"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"></rect></svg> ENDPOINT</button>
-    <button id="midBtn"><svg viewBox="0 0 24 24"><path d="M12 4l8 14H4z"></path></svg> MIDPOINT</button>
+    <button id="endBtn" class="active"><svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"></rect></svg> ENDPOINT</button>
+    <button id="midBtn" class="active"><svg viewBox="0 0 24 24"><path d="M12 4l8 14H4z"></path></svg> MIDPOINT</button>
     <button id="clearBtn" style="color: #ff6b6b;"><svg viewBox="0 0 24 24"><path d="M19 6L6 19M6 6l13 13"></path></svg> CLEAR</button>
 </div>
 
@@ -53,10 +38,10 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO Touch Engine v2.1 Ready.</div>
+    <div id="terminal">GSD-Lite PRO v2.3. OSNAP "Magnet" logic active.</div>
     <div id="input-area">
         <span class="cmd-label">COMMAND ></span>
-        <input type="text" id="cmdInput" autofocus placeholder="Type L or C...">
+        <input type="text" id="cmdInput" autofocus placeholder="L = Line, C = Circle...">
     </div>
 </div>
 
@@ -68,8 +53,9 @@
     const terminal = document.getElementById('terminal');
     const input = document.getElementById('cmdInput');
 
-    let gridVisible = true, snapEnabled = false, endSnap = false, midSnap = false;
+    let gridVisible = true, snapEnabled = false, endSnap = true, midSnap = true;
     let gridSpacing = 50, currentMode = null, points = [], drawings = [];
+    let mousePos = { clientX: 0, clientY: 0 };
 
     function log(msg, color="#00ff00") {
         terminal.innerHTML += `<br><span style="color:${color}">>> ${msg}</span>`;
@@ -80,7 +66,7 @@
         const container = document.getElementById('canvas-container');
         cadCanvas.width = gridCanvas.width = container.offsetWidth;
         cadCanvas.height = gridCanvas.height = container.offsetHeight;
-        drawGrid(); redrawAll();
+        drawGrid(); refresh();
     }
     window.addEventListener('resize', resize);
     window.addEventListener('load', resize);
@@ -96,30 +82,88 @@
 
     function getCoords(e) {
         const rect = cadCanvas.getBoundingClientRect();
-        // Use clientX/Y for both touch and mouse
-        let x = (e.clientX || e.touches?.[0].clientX) - rect.left;
-        let y = cadCanvas.height - ((e.clientY || e.touches?.[0].clientY) - rect.top);
+        let clientX = e.clientX || (e.touches ? e.touches[0].clientX : 0);
+        let clientY = e.clientY || (e.touches ? e.touches[0].clientY : 0);
+        
+        let x = clientX - rect.left;
+        let y = cadCanvas.height - (clientY - rect.top);
+        let activeSnap = null; 
 
         if (snapEnabled) {
             x = Math.round(x / gridSpacing) * gridSpacing;
             y = Math.round(y / gridSpacing) * gridSpacing;
         }
 
-        const threshold = 25; 
+        const threshold = 20; 
         drawings.forEach(d => {
             if (d.type === 'LINE') {
                 if (endSnap) {
-                    if (Math.hypot(x - d.p1.x, y - d.p1.y) < threshold) { x = d.p1.x; y = d.p1.y; }
-                    if (Math.hypot(x - d.p2.x, y - d.p2.y) < threshold) { x = d.p2.x; y = d.p2.y; }
+                    if (Math.hypot(x - d.p1.x, y - d.p1.y) < threshold) { x = d.p1.x; y = d.p1.y; activeSnap = 'END'; }
+                    else if (Math.hypot(x - d.p2.x, y - d.p2.y) < threshold) { x = d.p2.x; y = d.p2.y; activeSnap = 'END'; }
                 }
-                if (midSnap) {
+                if (midSnap && !activeSnap) {
                     const mx = (d.p1.x + d.p2.x) / 2, my = (d.p1.y + d.p2.y) / 2;
-                    if (Math.hypot(x - mx, y - my) < threshold) { x = mx; y = my; }
+                    if (Math.hypot(x - mx, y - my) < threshold) { x = mx; y = my; activeSnap = 'MID'; }
                 }
             }
         });
-        return { x, y };
+        return { x, y, snapType: activeSnap };
     }
+
+    function drawCrosshair(coords) {
+        const sX = coords.x;
+        const sY = cadCanvas.height - coords.y;
+
+        ctx.save();
+        ctx.setLineDash([4, 4]);
+        ctx.strokeStyle = "rgba(255, 0, 0, 0.4)";
+        ctx.beginPath(); ctx.moveTo(sX, 0); ctx.lineTo(sX, cadCanvas.height); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(0, sY); ctx.lineTo(cadCanvas.width, sY); ctx.stroke();
+        
+        // OSNAP Glyph (The "Magnet" Visual)
+        ctx.setLineDash([]);
+        ctx.lineWidth = 2;
+        ctx.strokeStyle = "#32cd32"; // AutoCAD Snap Green
+
+        if (coords.snapType === 'END') {
+            ctx.strokeRect(sX - 6, sY - 6, 12, 12); // Square for Endpoint
+        } else if (coords.snapType === 'MID') {
+            ctx.beginPath(); // Triangle for Midpoint
+            ctx.moveTo(sX, sY - 8); ctx.lineTo(sX - 8, sY + 6); ctx.lineTo(sX + 8, sY + 6); ctx.closePath();
+            ctx.stroke();
+        } else {
+            ctx.strokeStyle = "rgba(255, 0, 0, 0.8)";
+            ctx.strokeRect(sX - 4, sY - 4, 8, 8); // Normal pickbox
+        }
+        ctx.restore();
+    }
+
+    function refresh() {
+        ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+        drawings.forEach(d => {
+            ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
+            ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
+            if (d.type === 'LINE') { ctx.moveTo(d.p1.x, d.p1.y); ctx.lineTo(d.p2.x, d.p2.y); }
+            else { ctx.arc(d.center.x, d.center.y, d.radius, 0, Math.PI * 2); }
+            ctx.stroke(); ctx.restore();
+        });
+        const snapped = getCoords(mousePos);
+        drawCrosshair(snapped);
+    }
+
+    cadCanvas.addEventListener('pointermove', (e) => { mousePos = e; refresh(); });
+    cadCanvas.addEventListener('pointerdown', (e) => {
+        const coords = getCoords(e);
+        if (currentMode === 'LINE' || currentMode === 'CIRCLE') {
+            points.push(coords);
+            if (points.length === 2) {
+                if (currentMode === 'LINE') drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
+                else drawings.push({ type: 'CIRCLE', center: points[0], radius: Math.hypot(points[1].x-points[0].x, points[1].y-points[0].y) });
+                points = [];
+            }
+            refresh();
+        }
+    });
 
     function setMode(mode) {
         currentMode = mode; points = [];
@@ -130,34 +174,28 @@
         });
     }
 
-    // Modern Pointer Listeners (Handles Touch and Click)
-    document.getElementById('lineBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); setMode('LINE'); });
-    document.getElementById('circleBtn').addEventListener('pointerdown', (e) => { e.preventDefault(); setMode('CIRCLE'); });
-    
-    document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); };
-    document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
+    document.getElementById('lineBtn').onclick = () => setMode('LINE');
+    document.getElementById('circleBtn').onclick = () => setMode('CIRCLE');
+    document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); refresh(); };
+    document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); refresh();};
     document.getElementById('endBtn').onclick = function() { endSnap = !endSnap; this.classList.toggle('active'); };
     document.getElementById('midBtn').onclick = function() { midSnap = !midSnap; this.classList.toggle('active'); };
-    document.getElementById('clearBtn').onclick = () => { drawings = []; redrawAll(); log("Canvas Cleared.", "#ff4444"); };
+    document.getElementById('clearBtn').onclick = () => { drawings = []; refresh(); log("Cleared.", "#ff4444"); };
 
-    // Canvas Pointer Event
-    cadCanvas.addEventListener('pointerdown', (e) => {
-        const coords = getCoords(e);
-        if (currentMode === 'LINE' || currentMode === 'CIRCLE') {
-            points.push(coords);
-            if (points.length === 2) {
-                if (currentMode === 'LINE') drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
-                else {
-                    const r = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
-                    drawings.push({ type: 'CIRCLE', center: points[0], radius: r });
-                }
-                redrawAll(); points = [];
-            }
-        }
-    });
+    input.onkeydown = (e) => { if (e.key === 'Enter') { 
+        const cmd = input.value.trim().toUpperCase(); input.value = '';
+        if (cmd === 'L') setMode('LINE'); else if (cmd === 'C') setMode('CIRCLE');
+        else if (cmd === 'CLEAR') drawings = []; refresh();
+    }};
+    setTimeout(resize, 100);
 
-    function redrawAll() {
+
+    // ... (keep previous variables)
+
+    function refresh() {
         ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+        
+        // 1. Draw all finalized drawings
         drawings.forEach(d => {
             ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
             ctx.beginPath(); ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
@@ -165,20 +203,54 @@
             else { ctx.arc(d.center.x, d.center.y, d.radius, 0, Math.PI * 2); }
             ctx.stroke(); ctx.restore();
         });
+
+        const snapped = getCoords(mousePos);
+
+        // 2. NEW: Rubber-band Preview
+        if (points.length === 1 && currentMode) {
+            ctx.save(); 
+            ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
+            ctx.beginPath(); 
+            ctx.strokeStyle = "rgba(0, 120, 212, 0.6)"; // Blue preview color
+            ctx.setLineDash([5, 5]); 
+            ctx.lineWidth = 1.5;
+
+            const p1 = points[0];
+            if (currentMode === 'LINE') {
+                ctx.moveTo(p1.x, p1.y);
+                ctx.lineTo(snapped.x, snapped.y);
+            } else if (currentMode === 'CIRCLE') {
+                const radius = Math.hypot(snapped.x - p1.x, snapped.y - p1.y);
+                ctx.arc(p1.x, p1.y, radius, 0, Math.PI * 2);
+            }
+            ctx.stroke();
+            ctx.restore();
+        }
+
+        // 3. Draw the Crosshair and Snap Markers
+        drawCrosshair(snapped);
     }
 
-    input.onkeydown = (e) => {
-        if (e.key === 'Enter') {
-            const cmd = input.value.trim().toUpperCase(); input.value = '';
-            if (cmd === 'L') setMode('LINE');
-            else if (cmd === 'C') setMode('CIRCLE');
-            else if (cmd === 'CLEAR') document.getElementById('clearBtn').click();
-            else log(`Unknown command: ${cmd}`, "#ff4444");
+    // UPDATED Pointerdown to ensure refresh triggers correctly
+    cadCanvas.addEventListener('pointerdown', (e) => {
+        const coords = getCoords(e);
+        if (currentMode === 'LINE' || currentMode === 'CIRCLE') {
+            points.push(coords);
+            if (points.length === 2) {
+                if (currentMode === 'LINE') {
+                    drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
+                } else {
+                    const r = Math.hypot(points[1].x - points[0].x, points[1].y - points[0].y);
+                    drawings.push({ type: 'CIRCLE', center: points[0], radius: r });
+                }
+                points = []; // Reset for next shape
+                log(`${currentMode} Created.`);
+            }
+            refresh();
         }
-    };
+    });
 
-    // Force resize on start
-    setTimeout(resize, 100);
+    // ... (rest of the code remains the same)
 </script>
 </body>
 </html>
