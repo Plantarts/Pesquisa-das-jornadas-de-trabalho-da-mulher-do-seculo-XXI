@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v4.0 Multi-Snap</title>
+    <title>GSD-Lite PRO | v4.1 Grid Fix</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
@@ -11,7 +11,6 @@
         button, select, .snap-dropdown { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; position: relative; }
         button.active { background: var(--accent); border-color: #00aaff; }
         
-        /* Snap Dropdown Styling */
         .snap-menu { display: none; position: absolute; top: 100%; left: 0; background: #252525; border: 1px solid #555; border-radius: 4px; padding: 8px; z-index: 1100; min-width: 120px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
         .snap-dropdown:hover .snap-menu { display: block; }
         .snap-item { display: flex; align-items: center; gap: 8px; padding: 5px; color: #ccc; font-size: 11px; cursor: pointer; }
@@ -56,7 +55,7 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v4.0. Multiple Snap modes enabled.</div>
+    <div id="terminal">GSD-Lite PRO v4.1. Grid Rendering Fixed & Optimized.</div>
     <div id="input-area">
         <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
         <input type="text" id="cmdInput" autofocus placeholder="Type command or value...">
@@ -81,7 +80,7 @@
     cmdInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const val = parseFloat(cmdInput.value);
-            if (!isNaN(val)) { offsetDist = val; log(`Offset: ${val}`); }
+            if (!isNaN(val)) { offsetDist = val; log(`Offset distance updated: ${val}`); }
             cmdInput.value = "";
         }
     });
@@ -91,7 +90,7 @@
         if (e.ctrlKey && e.key === 'z') { e.preventDefault(); undo(); }
         if ((e.key === 'Delete' || e.key === 'Backspace') && selectedObj) {
             saveState(); drawings = drawings.filter(d => d !== selectedObj);
-            selectedObj = null; log("Deleted."); refresh();
+            selectedObj = null; log("Object deleted."); refresh();
         }
     });
     window.addEventListener('keyup', (e) => { if (e.key === 'Shift') shiftPressed = false; });
@@ -102,18 +101,37 @@
         const container = document.getElementById('canvas-container');
         cadCanvas.width = gridCanvas.width = container.offsetWidth;
         cadCanvas.height = gridCanvas.height = container.offsetHeight;
-        drawGrid(); refresh();
+        drawGrid(); 
+        refresh();
     }
     window.addEventListener('resize', resize);
     window.addEventListener('load', resize);
 
+    // FIXED GRID FUNCTION
     function drawGrid() {
         gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
         if (!gridVisible) return;
-        gCtx.beginPath(); gCtx.strokeStyle = "#e0e0e0"; gCtx.lineWidth = 0.5;
-        for (let x = 0; x <= gridCanvas.width; x += 50) { gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height); }
-        for (let y = 0; y <= gridCanvas.height; y += 50) { gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y); }
-        gCtx.stroke();
+
+        const step = 50;
+        const majorStep = 250;
+
+        gCtx.beginPath();
+        for (let x = 0; x <= gridCanvas.width; x += step) {
+            gCtx.strokeStyle = (x % majorStep === 0) ? "#ccc" : "#eee";
+            gCtx.lineWidth = (x % majorStep === 0) ? 1 : 0.5;
+            gCtx.moveTo(x, 0);
+            gCtx.lineTo(x, gridCanvas.height);
+            gCtx.stroke();
+            gCtx.beginPath(); // Reset path to change style per line
+        }
+        for (let y = 0; y <= gridCanvas.height; y += step) {
+            gCtx.strokeStyle = (y % majorStep === 0) ? "#ccc" : "#eee";
+            gCtx.lineWidth = (y % majorStep === 0) ? 1 : 0.5;
+            gCtx.moveTo(0, y);
+            gCtx.lineTo(gridCanvas.width, y);
+            gCtx.stroke();
+            gCtx.beginPath();
+        }
     }
 
     function getCoords(e, relativeToPoint = null) {
@@ -121,15 +139,12 @@
         const rect = cadCanvas.getBoundingClientRect();
         let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
 
-        // Priority 1: OSNAP (End/Mid)
         if (activeSnap) return { x: activeSnap.x, y: activeSnap.y };
         
-        // Priority 2: Grid Snap
         if (document.getElementById('snapGrid').checked) {
             x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50;
         }
 
-        // Priority 3: Ortho (Shift)
         if (shiftPressed && relativeToPoint) {
             const dx = x - relativeToPoint.x, dy = y - relativeToPoint.y;
             const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
@@ -244,20 +259,20 @@
             const target = drawings.find(d => d.type === 'LINE' && (Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y)) < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 5);
             if (target) { saveState(); drawings = drawings.filter(d => d !== target); log("Trimmed."); }
         } else if (currentMode === 'MOVE') {
-            if (selectedObj) { selectedObj = null; log("Placed."); }
+            if (selectedObj) { selectedObj = null; log("Object placed."); }
             else {
                 selectedObj = drawings.find(d => {
                     if (d.type === 'CIRCLE') return Math.hypot(c.x-d.center.x, c.y-d.center.y) < d.radius + 10;
                     return (Math.hypot(c.x-d.p1.x, c.y-d.p1.y) + Math.hypot(c.x-d.p2.x, c.y-d.p2.y)) < Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y) + 5;
                 });
-                if (selectedObj) { saveState(); dragOffset = c; log("Selected."); }
+                if (selectedObj) { saveState(); dragOffset = c; log("Object selected."); }
             }
         } else if (currentMode) {
             points.push(c);
             if (points.length === 2) {
                 saveState();
                 drawings.push({ type: currentMode, p1: {...points[0]}, p2: {...c}, center: {...points[0]}, radius: Math.hypot(c.x-points[0].x, c.y-points[0].y), layer: layerSel.value });
-                points = []; log("Created.");
+                points = []; log("Object created.");
             }
         }
         refresh();
@@ -267,10 +282,10 @@
     document.getElementById('circleBtn').onclick = function() { currentMode = 'CIRCLE'; setAct(this); };
     document.getElementById('moveBtn').onclick = function() { currentMode = 'MOVE'; setAct(this); };
     document.getElementById('trimBtn').onclick = function() { currentMode = 'TRIM'; setAct(this); };
-    document.getElementById('offsetBtn').onclick = function() { currentMode = 'OFFSET'; setAct(this); log("Input offset distance."); };
+    document.getElementById('offsetBtn').onclick = function() { currentMode = 'OFFSET'; setAct(this); log("Ready for offset. Input value in command line."); };
     function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); points = []; selectedObj = null; }
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); refresh(); };
-    document.getElementById('clearBtn').onclick = () => { saveState(); drawings = []; refresh(); log("Cleared."); };
+    document.getElementById('clearBtn').onclick = () => { saveState(); drawings = []; refresh(); log("Canvas cleared."); };
 
     setTimeout(resize, 100);
 </script>
