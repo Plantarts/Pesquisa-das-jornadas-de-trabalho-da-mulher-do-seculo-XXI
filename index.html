@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v3.8 Visual Snap</title>
+    <title>GSD-Lite PRO | v3.9 OSNAP Markers</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
@@ -26,11 +26,7 @@
     <button id="moveBtn" style="background: #6a1b9a;">MOVE</button>
     <button id="trimBtn" style="background: #c62828;">TRIM</button>
     <button id="offsetBtn" style="background: #2e7d32;">OFFSET</button>
-    <select id="layerSel">
-        <option value="0">Layer 0</option>
-        <option value="HIDDEN">Hidden</option>
-        <option value="DIM">Dimensions</option>
-    </select>
+    <select id="layerSel"><option value="0">Layer 0</option><option value="HIDDEN">Hidden</option><option value="DIM">Dimensions</option></select>
     <select id="unitSel"><option value="1">mm</option><option value="0.1">cm</option></select>
     <button id="gridBtn" class="active">GRID</button>
     <button id="snapBtn">SNAP</button>
@@ -43,7 +39,7 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v3.8. Cursor highlights active targets.</div>
+    <div id="terminal">GSD-Lite PRO v3.9. OSNAP Active: Square (End/Center), Triangle (Mid).</div>
     <div id="input-area">
         <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
         <input type="text" id="cmdInput" autofocus placeholder="Type command or value...">
@@ -58,6 +54,7 @@
     let gridVisible = true, snapEnabled = false, shiftPressed = false, currentMode = null;
     let points = [], drawings = [], undoStack = [], mousePos = null;
     let selectedObj = null, offsetDist = 20, dragOffset = { x: 0, y: 0 };
+    let activeSnap = null; // Stores {x, y, type}
 
     const LAYERS = { "0": { color: "#000", dash: [] }, "HIDDEN": { color: "#888", dash: [5, 5] }, "DIM": { color: "#f00", dash: [] } };
 
@@ -105,8 +102,11 @@
     function getCoords(e, relativeToPoint = null) {
         if (!e) return { x: 0, y: 0 };
         const rect = cadCanvas.getBoundingClientRect();
-        let x = (e.clientX || 0) - rect.left, y = cadCanvas.height - ((e.clientY || 0) - rect.top);
+        let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
+
+        if (activeSnap) return { x: activeSnap.x, y: activeSnap.y };
         if (snapEnabled) { x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50; }
+        
         if (shiftPressed && relativeToPoint) {
             const dx = x - relativeToPoint.x, dy = y - relativeToPoint.y;
             const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
@@ -114,6 +114,38 @@
             x = relativeToPoint.x + Math.cos(angle) * d; y = relativeToPoint.y + Math.sin(angle) * d;
         }
         return { x, y };
+    }
+
+    function findSnap(curX, curY) {
+        let best = null, minDist = 15;
+        drawings.forEach(d => {
+            let pts = [];
+            if (d.type === 'LINE') {
+                pts.push({x: d.p1.x, y: d.p1.y, type: 'END'});
+                pts.push({x: d.p2.x, y: d.p2.y, type: 'END'});
+                pts.push({x: (d.p1.x + d.p2.x)/2, y: (d.p1.y + d.p2.y)/2, type: 'MID'});
+            } else {
+                pts.push({x: d.center.x, y: d.center.y, type: 'END'}); // Using END for square icon
+            }
+            pts.forEach(p => {
+                const dist = Math.hypot(curX - p.x, curY - p.y);
+                if (dist < minDist) { minDist = dist; best = p; }
+            });
+        });
+        return best;
+    }
+
+    function drawMarker(snap) {
+        ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
+        ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2; ctx.beginPath();
+        const s = 6;
+        if (snap.type === 'END') {
+            ctx.rect(snap.x - s, snap.y - s, s*2, s*2);
+        } else if (snap.type === 'MID') {
+            ctx.moveTo(snap.x, snap.y + s); ctx.lineTo(snap.x - s, snap.y - s);
+            ctx.lineTo(snap.x + s, snap.y - s); ctx.closePath();
+        }
+        ctx.stroke(); ctx.restore();
     }
 
     function refresh() {
@@ -131,19 +163,15 @@
         });
 
         if (!mousePos) return;
+        const rawX = mousePos.clientX - rect.left, rawY = cadCanvas.height - (mousePos.clientY - rect.top);
+        activeSnap = findSnap(rawX, rawY);
+        
+        if (activeSnap) drawMarker(activeSnap);
+
         const cur = getCoords(mousePos, points[0]);
 
-        // HIT DETECTION for Cursor Color
-        let isHovering = drawings.some(d => {
-            if (d.type === 'CIRCLE') return Math.abs(Math.hypot(cur.x-d.center.x, cur.y-d.center.y) - d.radius) < 10;
-            const l = Math.hypot(d.p1.x-d.p2.x, d.p1.y-d.p2.y);
-            return (Math.hypot(cur.x-d.p1.x, cur.y-d.p1.y) + Math.hypot(cur.x-d.p2.x, cur.y-d.p2.y)) < l + 5;
-        });
-
-        // Cursor UI
-        ctx.beginPath(); 
-        ctx.strokeStyle = isHovering ? "#00ff00" : "rgba(0,0,0,0.15)";
-        ctx.lineWidth = isHovering ? 2 : 1;
+        // Crosshairs
+        ctx.beginPath(); ctx.strokeStyle = activeSnap ? "#00ff00" : "rgba(0,0,0,0.15)";
         ctx.moveTo(mousePos.clientX - rect.left, 0); ctx.lineTo(mousePos.clientX - rect.left, cadCanvas.height);
         ctx.moveTo(0, mousePos.clientY - rect.top); ctx.lineTo(cadCanvas.width, mousePos.clientY - rect.top);
         ctx.stroke();
@@ -168,8 +196,7 @@
                 label = `R: ${(r * scale).toFixed(2)}`;
             }
             ctx.stroke(); ctx.restore();
-            ctx.fillStyle = isHovering ? "#008000" : "black"; 
-            ctx.font = "bold 13px Segoe UI";
+            ctx.fillStyle = "black"; ctx.font = "bold 13px Segoe UI";
             ctx.fillText(label, mousePos.clientX - rect.left + 15, mousePos.clientY - rect.top - 15);
         }
     }
@@ -219,7 +246,6 @@
     document.getElementById('moveBtn').onclick = function() { currentMode = 'MOVE'; setAct(this); };
     document.getElementById('trimBtn').onclick = function() { currentMode = 'TRIM'; setAct(this); };
     document.getElementById('offsetBtn').onclick = function() { currentMode = 'OFFSET'; setAct(this); log("Input offset distance."); };
-    
     function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); points = []; selectedObj = null; }
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); refresh(); };
     document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
