@@ -3,27 +3,53 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite Web CAD Pro + OSNAP</title>
+    <title>GSD-Lite PRO | Graphical Interface</title>
     <style>
-        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2b2b2b; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
+        body { font-family: 'Segoe UI', sans-serif; background: #2b2b2b; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #canvas-container { flex-grow: 1; background: #ffffff; position: relative; cursor: crosshair; }
         canvas { position: absolute; top: 0; left: 0; }
         #terminal { height: 100px; background: #121212; color: #00ff00; padding: 12px; font-family: 'Consolas', monospace; overflow-y: auto; border-top: 2px solid #444; font-size: 13px; z-index: 10; }
         #input-area { background: #1e1e1e; padding: 8px 15px; display: flex; align-items: center; border-top: 1px solid #333; z-index: 10; }
         input { flex-grow: 1; background: transparent; color: #fff; border: none; padding: 5px; font-family: 'Consolas', monospace; outline: none; font-size: 16px; }
-        .toolbar { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 5px; z-index: 20; max-width: 90%; }
-        button { background: #444; color: white; border: 1px solid #666; padding: 8px 10px; cursor: pointer; font-size: 11px; border-radius: 4px; text-transform: uppercase; }
-        button.active { background: #0078d4; border-color: #00aaff; box-shadow: 0 0 5px #00aaff; }
+        
+        /* Toolbar Styles */
+        .toolbar { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 8px; z-index: 20; }
+        button { 
+            background: #3c3c3c; color: white; border: 1px solid #555; 
+            padding: 6px 10px; cursor: pointer; border-radius: 4px; 
+            display: flex; align-items: center; gap: 6px; font-size: 11px;
+            transition: 0.2s;
+        }
+        button svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 2; }
+        button:hover { background: #505050; }
+        button.active { background: #0078d4; border-color: #00aaff; color: white; }
         .label { color: #00aaff; font-weight: bold; margin-right: 10px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="toolbar">
-    <button id="gridBtn" class="active">Grid</button>
-    <button id="snapBtn">Snap (Grid)</button>
-    <button id="endBtn" class="osnap">Endpoint</button>
-    <button id="midBtn" class="osnap">Midpoint</button>
+    <button id="lineBtn" title="Line (L)">
+        <svg viewBox="0 0 24 24"><line x1="3" y1="21" x2="21" y2="3"></line></svg>
+        LINE
+    </button>
+
+    <button id="gridBtn" class="active" title="Grid (F7)">
+        <svg viewBox="0 0 24 24"><path d="M3 3h18v18H3zM3 9h18M3 15h18M9 3v18M15 3v18"></path></svg>
+        GRID
+    </button>
+    <button id="snapBtn" title="Grid Snap (F9)">
+        <svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="2" fill="currentColor"></circle><path d="M12 3v3m0 12v3M3 12h3m12 0h3"></path></svg>
+        SNAP
+    </button>
+    <button id="endBtn" title="Endpoint Snap">
+        <svg viewBox="0 0 24 24"><rect x="4" y="4" width="16" height="16"></rect></svg>
+        ENDPOINT
+    </button>
+    <button id="midBtn" title="Midpoint Snap">
+        <svg viewBox="0 0 24 24"><path d="M12 4l8 14H4z"></path></svg>
+        MIDPOINT
+    </button>
 </div>
 
 <div id="canvas-container">
@@ -31,11 +57,11 @@
     <canvas id="cadCanvas"></canvas>
 </div>
 
-<div id="terminal">GSD-Lite PRO OSNAP Enabled. <br>Use 'Endpoint' or 'Midpoint' for precision connections.</div>
+<div id="terminal">GSD-Lite PRO Ready. <br>Select a tool from the graphical toolbar.</div>
 
 <div id="input-area">
     <span class="label">COMMAND ></span>
-    <input type="text" id="cmdInput" autofocus placeholder="L for Line...">
+    <input type="text" id="cmdInput" autofocus placeholder="Type command...">
 </div>
 
 <script>
@@ -69,23 +95,20 @@
         let x = e.clientX - rect.left;
         let y = cadCanvas.height - (e.clientY - rect.top);
 
-        // 1. Grid Snap
         if (snapEnabled) {
             x = Math.round(x / gridSpacing) * gridSpacing;
             y = Math.round(y / gridSpacing) * gridSpacing;
         }
 
-        // 2. OSNAP (Object Snap)
-        const threshold = 20; 
+        const threshold = 15; 
         drawings.forEach(d => {
             if (d.type === 'LINE') {
-                const p1 = d.p1, p2 = d.p2;
                 if (endSnap) {
-                    if (Math.hypot(x - p1.x, y - p1.y) < threshold) { x = p1.x; y = p1.y; }
-                    if (Math.hypot(x - p2.x, y - p2.y) < threshold) { x = p2.x; y = p2.y; }
+                    if (Math.hypot(x - d.p1.x, y - d.p1.y) < threshold) { x = d.p1.x; y = d.p1.y; }
+                    if (Math.hypot(x - d.p2.x, y - d.p2.y) < threshold) { x = d.p2.x; y = d.p2.y; }
                 }
                 if (midSnap) {
-                    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                    const mx = (d.p1.x + d.p2.x) / 2, my = (d.p1.y + d.p2.y) / 2;
                     if (Math.hypot(x - mx, y - my) < threshold) { x = mx; y = my; }
                 }
             }
@@ -93,7 +116,8 @@
         return { x, y };
     }
 
-    // Toggle Buttons Logic
+    // Button Logic
+    document.getElementById('lineBtn').onclick = () => { currentMode = 'LINE'; points = []; };
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); };
     document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
     document.getElementById('endBtn').onclick = function() { endSnap = !endSnap; this.classList.toggle('active'); };
@@ -104,8 +128,8 @@
         if (currentMode === 'LINE') {
             points.push(coords);
             if (points.length === 2) {
-                const line = { type: 'LINE', p1: points[0], p2: points[1] };
-                drawings.push(line); renderLine(line.p1, line.p2); points = [];
+                drawings.push({ type: 'LINE', p1: points[0], p2: points[1] });
+                renderLine(points[0], points[1]); points = [];
             }
         }
     };
