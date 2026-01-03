@@ -3,19 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v3.9 OSNAP Markers</title>
+    <title>GSD-Lite PRO | v4.0 Multi-Snap</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
         .toolbar { position: fixed; top: 10px; left: 10px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; background: rgba(30, 30, 30, 0.95); padding: 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #444; }
-        button, select { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; }
+        button, select, .snap-dropdown { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; position: relative; }
         button.active { background: var(--accent); border-color: #00aaff; }
+        
+        /* Snap Dropdown Styling */
+        .snap-menu { display: none; position: absolute; top: 100%; left: 0; background: #252525; border: 1px solid #555; border-radius: 4px; padding: 8px; z-index: 1100; min-width: 120px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
+        .snap-dropdown:hover .snap-menu { display: block; }
+        .snap-item { display: flex; align-items: center; gap: 8px; padding: 5px; color: #ccc; font-size: 11px; cursor: pointer; }
+        .snap-item:hover { color: white; }
+        .snap-item input { cursor: pointer; }
+
         #canvas-container { flex-grow: 1; position: relative; background: #ffffff; width: 100vw; height: calc(100vh - 140px); }
         canvas { position: absolute; top: 0; left: 0; }
         #bottom-panel { height: 140px; display: flex; flex-direction: column; z-index: 100; }
         #terminal { flex-grow: 1; background: #121212; color: #00ff00; padding: 10px; font-family: 'Consolas', monospace; overflow-y: auto; font-size: 13px; border-top: 2px solid #444; }
         #input-area { background: var(--panel); padding: 10px 15px; display: flex; align-items: center; border-top: 1px solid #333; }
-        input { flex-grow: 1; background: transparent; color: #fff; border: none; outline: none; font-family: 'Consolas', monospace; font-size: 16px; }
+        input[type="text"] { flex-grow: 1; background: transparent; color: #fff; border: none; outline: none; font-family: 'Consolas', monospace; font-size: 16px; }
     </style>
 </head>
 <body>
@@ -29,7 +37,16 @@
     <select id="layerSel"><option value="0">Layer 0</option><option value="HIDDEN">Hidden</option><option value="DIM">Dimensions</option></select>
     <select id="unitSel"><option value="1">mm</option><option value="0.1">cm</option></select>
     <button id="gridBtn" class="active">GRID</button>
-    <button id="snapBtn">SNAP</button>
+    
+    <div class="snap-dropdown" id="snapToggle">
+        SNAP OPTIONS ▾
+        <div class="snap-menu">
+            <label class="snap-item"><input type="checkbox" id="snapGrid"> Grid (50)</label>
+            <label class="snap-item"><input type="checkbox" id="snapEnd" checked> Endpoint</label>
+            <label class="snap-item"><input type="checkbox" id="snapMid" checked> Midpoint</label>
+        </div>
+    </div>
+
     <button id="clearBtn" style="color: #ff6b6b;">CLEAR</button>
 </div>
 
@@ -39,7 +56,7 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v3.9. OSNAP Active: Square (End/Center), Triangle (Mid).</div>
+    <div id="terminal">GSD-Lite PRO v4.0. Multiple Snap modes enabled.</div>
     <div id="input-area">
         <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
         <input type="text" id="cmdInput" autofocus placeholder="Type command or value...">
@@ -51,10 +68,10 @@
     const ctx = cadCanvas.getContext('2d'), gCtx = gridCanvas.getContext('2d');
     const terminal = document.getElementById('terminal'), layerSel = document.getElementById('layerSel'), unitSel = document.getElementById('unitSel'), cmdInput = document.getElementById('cmdInput');
 
-    let gridVisible = true, snapEnabled = false, shiftPressed = false, currentMode = null;
+    let gridVisible = true, shiftPressed = false, currentMode = null;
     let points = [], drawings = [], undoStack = [], mousePos = null;
     let selectedObj = null, offsetDist = 20, dragOffset = { x: 0, y: 0 };
-    let activeSnap = null; // Stores {x, y, type}
+    let activeSnap = null;
 
     const LAYERS = { "0": { color: "#000", dash: [] }, "HIDDEN": { color: "#888", dash: [5, 5] }, "DIM": { color: "#f00", dash: [] } };
 
@@ -64,7 +81,7 @@
     cmdInput.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') {
             const val = parseFloat(cmdInput.value);
-            if (!isNaN(val)) { offsetDist = val; log(`Offset distance: ${val}`); }
+            if (!isNaN(val)) { offsetDist = val; log(`Offset: ${val}`); }
             cmdInput.value = "";
         }
     });
@@ -104,9 +121,15 @@
         const rect = cadCanvas.getBoundingClientRect();
         let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
 
+        // Priority 1: OSNAP (End/Mid)
         if (activeSnap) return { x: activeSnap.x, y: activeSnap.y };
-        if (snapEnabled) { x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50; }
         
+        // Priority 2: Grid Snap
+        if (document.getElementById('snapGrid').checked) {
+            x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50;
+        }
+
+        // Priority 3: Ortho (Shift)
         if (shiftPressed && relativeToPoint) {
             const dx = x - relativeToPoint.x, dy = y - relativeToPoint.y;
             const angle = Math.round(Math.atan2(dy, dx) / (Math.PI / 4)) * (Math.PI / 4);
@@ -118,14 +141,19 @@
 
     function findSnap(curX, curY) {
         let best = null, minDist = 15;
+        const doEnd = document.getElementById('snapEnd').checked;
+        const doMid = document.getElementById('snapMid').checked;
+
         drawings.forEach(d => {
             let pts = [];
             if (d.type === 'LINE') {
-                pts.push({x: d.p1.x, y: d.p1.y, type: 'END'});
-                pts.push({x: d.p2.x, y: d.p2.y, type: 'END'});
-                pts.push({x: (d.p1.x + d.p2.x)/2, y: (d.p1.y + d.p2.y)/2, type: 'MID'});
+                if (doEnd) {
+                    pts.push({x: d.p1.x, y: d.p1.y, type: 'END'});
+                    pts.push({x: d.p2.x, y: d.p2.y, type: 'END'});
+                }
+                if (doMid) pts.push({x: (d.p1.x + d.p2.x)/2, y: (d.p1.y + d.p2.y)/2, type: 'MID'});
             } else {
-                pts.push({x: d.center.x, y: d.center.y, type: 'END'}); // Using END for square icon
+                if (doEnd) pts.push({x: d.center.x, y: d.center.y, type: 'END'});
             }
             pts.forEach(p => {
                 const dist = Math.hypot(curX - p.x, curY - p.y);
@@ -138,13 +166,9 @@
     function drawMarker(snap) {
         ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
         ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2; ctx.beginPath();
-        const s = 6;
-        if (snap.type === 'END') {
-            ctx.rect(snap.x - s, snap.y - s, s*2, s*2);
-        } else if (snap.type === 'MID') {
-            ctx.moveTo(snap.x, snap.y + s); ctx.lineTo(snap.x - s, snap.y - s);
-            ctx.lineTo(snap.x + s, snap.y - s); ctx.closePath();
-        }
+        const s = 7;
+        if (snap.type === 'END') { ctx.rect(snap.x - s, snap.y - s, s*2, s*2); } 
+        else if (snap.type === 'MID') { ctx.moveTo(snap.x, snap.y + s); ctx.lineTo(snap.x - s, snap.y - s); ctx.lineTo(snap.x + s, snap.y - s); ctx.closePath(); }
         ctx.stroke(); ctx.restore();
     }
 
@@ -165,12 +189,10 @@
         if (!mousePos) return;
         const rawX = mousePos.clientX - rect.left, rawY = cadCanvas.height - (mousePos.clientY - rect.top);
         activeSnap = findSnap(rawX, rawY);
-        
         if (activeSnap) drawMarker(activeSnap);
 
         const cur = getCoords(mousePos, points[0]);
 
-        // Crosshairs
         ctx.beginPath(); ctx.strokeStyle = activeSnap ? "#00ff00" : "rgba(0,0,0,0.15)";
         ctx.moveTo(mousePos.clientX - rect.left, 0); ctx.lineTo(mousePos.clientX - rect.left, cadCanvas.height);
         ctx.moveTo(0, mousePos.clientY - rect.top); ctx.lineTo(cadCanvas.width, mousePos.clientY - rect.top);
@@ -248,7 +270,6 @@
     document.getElementById('offsetBtn').onclick = function() { currentMode = 'OFFSET'; setAct(this); log("Input offset distance."); };
     function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); points = []; selectedObj = null; }
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); refresh(); };
-    document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
     document.getElementById('clearBtn').onclick = () => { saveState(); drawings = []; refresh(); log("Cleared."); };
 
     setTimeout(resize, 100);
