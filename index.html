@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>GSD-Lite Web CAD</title>
+    <style>
+        body { font-family: 'Helvetica Neue', Helvetica, Arial, sans-serif; background: #f4f4f4; margin: 0; display: flex; flex-direction: column; height: 100vh; }
+        #canvas-container { flex-grow: 1; background: #fff; border-bottom: 2px solid #ccc; position: relative; overflow: hidden; }
+        canvas { display: block; background-color: #ffffff; cursor: crosshair; }
+        #terminal { height: 150px; background: #1e1e1e; color: #00ff00; padding: 10px; font-family: monospace; overflow-y: auto; font-size: 14px; }
+        #input-area { background: #333; padding: 10px; display: flex; }
+        input { flex-grow: 1; background: #000; color: #00ff00; border: none; padding: 10px; font-family: monospace; outline: none; }
+        .label { color: #aaa; padding-right: 10px; font-family: monospace; align-self: center; }
+    </style>
+</head>
+<body>
+
+<div id="canvas-container">
+    <canvas id="cadCanvas"></canvas>
+</div>
+
+<div id="terminal">GSD-Lite CAD Initialized...<br>Commands: L (x1 y1 x2 y2), C (cx cy r), CLEAR</div>
+
+<div id="input-area">
+    <span class="label">COMMAND:</span>
+    <input type="text" id="cmdInput" autofocus autofocus placeholder="Type command and press Enter">
+</div>
+
+<script>
+    const canvas = document.getElementById('cadCanvas');
+    const ctx = canvas.getContext('2d');
+    const terminal = document.getElementById('terminal');
+    const input = document.getElementById('cmdInput');
+
+    // Resize canvas to fill container
+    function resize() {
+        canvas.width = canvas.parentElement.clientWidth;
+        canvas.height = canvas.parentElement.clientHeight;
+        ctx.translate(0, canvas.height); // Flip Y axis to match Cartesian
+        ctx.scale(1, -1);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function log(msg) { terminal.innerHTML += `<br>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
+
+    input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') {
+            const raw = input.value.trim().toUpperCase();
+            const parts = raw.split(' ');
+            const cmd = parts[0];
+            const args = parts.slice(1).map(Number);
+            
+            if (cmd === 'L' && args.length === 4) {
+                ctx.beginPath();
+                ctx.moveTo(args[0], args[1]);
+                ctx.lineTo(args[2], args[3]);
+                ctx.stroke();
+                log(`Line: (${args[0]},${args[1]}) to (${args[2]},${args[3]})`);
+            } else if (cmd === 'C' && args.length === 3) {
+                ctx.beginPath();
+                ctx.arc(args[0], args[1], args[2], 0, 2 * Math.PI);
+                ctx.stroke();
+                log(`Circle: Center(${args[0]},${args[1]}) Radius ${args[2]}`);
+            } else if (cmd === 'CLEAR') {
+                ctx.setTransform(1, 0, 0, 1, 0, 0);
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                resize();
+                log("Canvas Cleared");
+            } else {
+                log("Invalid Command syntax.");
+            }
+            input.value = '';
+        }
+    });
+</script>
+</body>
+</html>
