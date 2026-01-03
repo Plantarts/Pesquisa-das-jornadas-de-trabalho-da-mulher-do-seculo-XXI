@@ -3,25 +3,27 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite Web CAD Pro + Grid</title>
+    <title>GSD-Lite Web CAD Pro + OSNAP</title>
     <style>
         body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #2b2b2b; margin: 0; display: flex; flex-direction: column; height: 100vh; overflow: hidden; }
         #canvas-container { flex-grow: 1; background: #ffffff; position: relative; cursor: crosshair; }
         canvas { position: absolute; top: 0; left: 0; }
-        #terminal { height: 120px; background: #121212; color: #00ff00; padding: 12px; font-family: 'Consolas', monospace; overflow-y: auto; border-top: 2px solid #444; font-size: 13px; z-index: 10; }
+        #terminal { height: 100px; background: #121212; color: #00ff00; padding: 12px; font-family: 'Consolas', monospace; overflow-y: auto; border-top: 2px solid #444; font-size: 13px; z-index: 10; }
         #input-area { background: #1e1e1e; padding: 8px 15px; display: flex; align-items: center; border-top: 1px solid #333; z-index: 10; }
         input { flex-grow: 1; background: transparent; color: #fff; border: none; padding: 5px; font-family: 'Consolas', monospace; outline: none; font-size: 16px; }
-        .toolbar { position: absolute; top: 10px; left: 10px; display: flex; gap: 5px; z-index: 20; }
-        button { background: #444; color: white; border: 1px solid #666; padding: 8px 12px; cursor: pointer; font-size: 12px; border-radius: 4px; }
-        button.active { background: #0078d4; border-color: #00aaff; }
+        .toolbar { position: absolute; top: 10px; left: 10px; display: flex; flex-wrap: wrap; gap: 5px; z-index: 20; max-width: 90%; }
+        button { background: #444; color: white; border: 1px solid #666; padding: 8px 10px; cursor: pointer; font-size: 11px; border-radius: 4px; text-transform: uppercase; }
+        button.active { background: #0078d4; border-color: #00aaff; box-shadow: 0 0 5px #00aaff; }
         .label { color: #00aaff; font-weight: bold; margin-right: 10px; font-size: 12px; }
     </style>
 </head>
 <body>
 
 <div class="toolbar">
-    <button id="gridBtn" class="active">GRID (F7)</button>
-    <button id="snapBtn">SNAP (F9)</button>
+    <button id="gridBtn" class="active">Grid</button>
+    <button id="snapBtn">Snap (Grid)</button>
+    <button id="endBtn" class="osnap">Endpoint</button>
+    <button id="midBtn" class="osnap">Midpoint</button>
 </div>
 
 <div id="canvas-container">
@@ -29,11 +31,11 @@
     <canvas id="cadCanvas"></canvas>
 </div>
 
-<div id="terminal">GSD-Lite PRO Initialized. <br>Grid toggle enabled. Click 'GRID' or press F7.</div>
+<div id="terminal">GSD-Lite PRO OSNAP Enabled. <br>Use 'Endpoint' or 'Midpoint' for precision connections.</div>
 
 <div id="input-area">
     <span class="label">COMMAND ></span>
-    <input type="text" id="cmdInput" autofocus placeholder="Type command...">
+    <input type="text" id="cmdInput" autofocus placeholder="L for Line...">
 </div>
 
 <script>
@@ -41,41 +43,24 @@
     const gridCanvas = document.getElementById('gridCanvas');
     const ctx = cadCanvas.getContext('2d');
     const gCtx = gridCanvas.getContext('2d');
-    const gridBtn = document.getElementById('gridBtn');
-    const snapBtn = document.getElementById('snapBtn');
     const input = document.getElementById('cmdInput');
 
-    let gridVisible = true;
-    let snapEnabled = false;
-    let gridSpacing = 50;
-    let currentMode = null;
-    let points = [];
-    let drawings = []; // Store drawings to redraw when resizing
+    let gridVisible = true, snapEnabled = false, endSnap = false, midSnap = false;
+    let gridSpacing = 50, currentMode = null, points = [], drawings = [];
 
     function resize() {
-        const w = window.innerWidth;
-        const h = window.innerHeight - 150;
-        cadCanvas.width = gridCanvas.width = w;
-        cadCanvas.height = gridCanvas.height = h;
-        drawGrid();
-        redrawAll();
+        cadCanvas.width = gridCanvas.width = window.innerWidth;
+        cadCanvas.height = gridCanvas.height = window.innerHeight - 130;
+        drawGrid(); redrawAll();
     }
     window.addEventListener('resize', resize);
 
     function drawGrid() {
         gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
         if (!gridVisible) return;
-        
-        gCtx.beginPath();
-        gCtx.strokeStyle = "#e0e0e0";
-        gCtx.lineWidth = 0.5;
-
-        for (let x = 0; x <= gridCanvas.width; x += gridSpacing) {
-            gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height);
-        }
-        for (let y = gridCanvas.height; y >= 0; y -= gridSpacing) {
-            gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y);
-        }
+        gCtx.beginPath(); gCtx.strokeStyle = "#e8e8e8";
+        for (let x = 0; x <= gridCanvas.width; x += gridSpacing) { gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height); }
+        for (let y = 0; y <= gridCanvas.height; y += gridSpacing) { gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y); }
         gCtx.stroke();
     }
 
@@ -83,64 +68,66 @@
         const rect = cadCanvas.getBoundingClientRect();
         let x = e.clientX - rect.left;
         let y = cadCanvas.height - (e.clientY - rect.top);
-        
+
+        // 1. Grid Snap
         if (snapEnabled) {
             x = Math.round(x / gridSpacing) * gridSpacing;
             y = Math.round(y / gridSpacing) * gridSpacing;
         }
+
+        // 2. OSNAP (Object Snap)
+        const threshold = 20; 
+        drawings.forEach(d => {
+            if (d.type === 'LINE') {
+                const p1 = d.p1, p2 = d.p2;
+                if (endSnap) {
+                    if (Math.hypot(x - p1.x, y - p1.y) < threshold) { x = p1.x; y = p1.y; }
+                    if (Math.hypot(x - p2.x, y - p2.y) < threshold) { x = p2.x; y = p2.y; }
+                }
+                if (midSnap) {
+                    const mx = (p1.x + p2.x) / 2, my = (p1.y + p2.y) / 2;
+                    if (Math.hypot(x - mx, y - my) < threshold) { x = mx; y = my; }
+                }
+            }
+        });
         return { x, y };
     }
 
-    gridBtn.addEventListener('click', () => {
-        gridVisible = !gridVisible;
-        gridBtn.classList.toggle('active', gridVisible);
-        drawGrid();
-    });
+    // Toggle Buttons Logic
+    document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); };
+    document.getElementById('snapBtn').onclick = function() { snapEnabled = !snapEnabled; this.classList.toggle('active'); };
+    document.getElementById('endBtn').onclick = function() { endSnap = !endSnap; this.classList.toggle('active'); };
+    document.getElementById('midBtn').onclick = function() { midSnap = !midSnap; this.classList.toggle('active'); };
 
-    snapBtn.addEventListener('click', () => {
-        snapEnabled = !snapEnabled;
-        snapBtn.classList.toggle('active', snapEnabled);
-    });
-
-    cadCanvas.addEventListener('mousedown', (e) => {
+    cadCanvas.onmousedown = (e) => {
         const coords = getCoords(e);
         if (currentMode === 'LINE') {
             points.push(coords);
             if (points.length === 2) {
                 const line = { type: 'LINE', p1: points[0], p2: points[1] };
-                drawings.push(line);
-                renderLine(line.p1, line.p2);
-                points = [];
+                drawings.push(line); renderLine(line.p1, line.p2); points = [];
             }
         }
-    });
+    };
 
     function renderLine(p1, p2) {
-        ctx.save();
-        ctx.translate(0, cadCanvas.height);
-        ctx.scale(1, -1);
-        ctx.beginPath();
-        ctx.moveTo(p1.x, p1.y);
-        ctx.lineTo(p2.x, p2.y);
-        ctx.strokeStyle = "#000"; ctx.lineWidth = 2;
-        ctx.stroke();
-        ctx.restore();
+        ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
+        ctx.beginPath(); ctx.moveTo(p1.x, p1.y); ctx.lineTo(p2.x, p2.y);
+        ctx.strokeStyle = "#000"; ctx.lineWidth = 2; ctx.stroke(); ctx.restore();
     }
 
     function redrawAll() {
         ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
-        drawings.forEach(d => { if (d.type === 'LINE') renderLine(d.p1, d.p2); });
+        drawings.forEach(d => renderLine(d.p1, d.p2));
     }
 
-    input.addEventListener('keydown', (e) => {
+    input.onkeydown = (e) => {
         if (e.key === 'Enter') {
-            const raw = input.value.trim().toUpperCase();
-            input.value = '';
-            if (raw === 'L') { currentMode = 'LINE'; points = []; }
+            const raw = input.value.trim().toUpperCase(); input.value = '';
+            if (raw === 'L') currentMode = 'LINE';
             if (raw === 'CLEAR') { drawings = []; redrawAll(); }
         }
-    });
-
+    };
     resize();
 </script>
 </body>
