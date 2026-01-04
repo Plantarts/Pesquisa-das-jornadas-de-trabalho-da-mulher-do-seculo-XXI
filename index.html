@@ -3,41 +3,43 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v4.3 Dynamic Input</title>
+    <title>GSD-Lite PRO | v4.3.1 - Restoration</title>
     <style>
         :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
         html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
         
-        /* Toolbar Styling */
         .toolbar { position: fixed; top: 10px; left: 10px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; background: rgba(30, 30, 30, 0.95); padding: 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #444; }
         button, select, .snap-dropdown { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; position: relative; }
         button.active { background: var(--accent); border-color: #00aaff; }
         
-        /* Snap Menu */
         .snap-menu { display: none; position: absolute; top: 100%; left: 0; background: #252525; border: 1px solid #555; border-radius: 4px; padding: 8px; z-index: 1100; min-width: 140px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
         .snap-dropdown:hover .snap-menu { display: block; }
         .snap-item { display: flex; align-items: center; gap: 8px; padding: 5px; color: #ccc; font-size: 11px; cursor: pointer; }
         
-        /* Canvas Layout */
-        #canvas-container { flex-grow: 1; position: relative; background: #ffffff; width: 100vw; height: calc(100vh - 140px); cursor: crosshair; }
+        /* Fixed Cursor Visibility */
+        #canvas-container { 
+            flex-grow: 1; 
+            position: relative; 
+            background: #ffffff; 
+            width: 100vw; 
+            height: calc(100vh - 140px); 
+            cursor: none; /* We will draw a custom crosshair on canvas for better precision */
+        }
         canvas { position: absolute; top: 0; left: 0; touch-action: none; }
         
-        /* Floating Dynamic Input Box */
         #dynamic-input {
             position: absolute;
-            pointer-events: none; /* Allows clicks to pass through to canvas */
+            pointer-events: none;
             display: none;
             gap: 5px;
-            background: rgba(255, 255, 255, 0.9);
-            padding: 4px;
-            border-radius: 3px;
+            background: rgba(30, 30, 30, 0.9);
+            padding: 6px;
+            border-radius: 4px;
             border: 1px solid var(--accent);
             z-index: 2000;
-            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
         }
-        .dyn-box { width: 50px; border: 1px solid #ccc; font-size: 12px; padding: 2px; outline: none; pointer-events: auto; }
+        .dyn-box { width: 60px; border: 1px solid #555; background: #000; color: #00ff00; font-family: 'Consolas', monospace; font-size: 12px; padding: 3px; outline: none; pointer-events: auto; }
 
-        /* Bottom Panel */
         #bottom-panel { height: 140px; display: flex; flex-direction: column; z-index: 100; }
         #terminal { flex-grow: 1; background: #121212; color: #00ff00; padding: 10px; font-family: 'Consolas', monospace; overflow-y: auto; font-size: 13px; border-top: 2px solid #444; }
         #input-area { background: var(--panel); padding: 10px 15px; display: flex; align-items: center; border-top: 1px solid #333; }
@@ -50,6 +52,7 @@
     <button id="lineBtn">LINE</button>
     <button id="circleBtn">CIRCLE</button>
     <button id="rectBtn">RECT</button>
+    <button id="undoBtn" style="background: #455a64;">UNDO (Ctrl+Z)</button>
     <button id="moveBtn" style="background: #6a1b9a;">MOVE</button>
     <button id="trimBtn" style="background: #c62828;">TRIM</button>
     <button id="offsetBtn" style="background: #2e7d32;">OFFSET</button>
@@ -78,10 +81,10 @@
 </div>
 
 <div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v4.3. Dynamic Input enabled. Press TAB to switch X/Y.</div>
+    <div id="terminal">GSD-Lite PRO v4.3.1. Cursor and Ctrl+Z Fixed.</div>
     <div id="input-area">
         <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
-        <input type="text" id="cmdInput" autofocus placeholder="Type value or @x,y...">
+        <input type="text" id="cmdInput" autofocus placeholder="Type value, @x,y or press Ctrl+Z...">
     </div>
 </div>
 <script>
@@ -91,24 +94,46 @@
     const unitSel = document.getElementById('unitSel'), cmdInput = document.getElementById('cmdInput');
     const dynInput = document.getElementById('dynamic-input'), dynX = document.getElementById('dynX'), dynY = document.getElementById('dynY');
 
-    let gridVisible = true, shiftPressed = false, currentMode = null;
+    let gridVisible = true, currentMode = null;
     let points = [], drawings = [], undoStack = [], mousePos = null;
     let selectedObj = null, offsetDist = 20, activeSnap = null;
 
     const LAYERS = { "0": { color: "#000", dash: [] }, "HIDDEN": { color: "#888", dash: [5, 5] }, "DIM": { color: "#f00", dash: [] } };
 
     function log(msg) { terminal.innerHTML += `<br>>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
-    function saveState() { undoStack.push(JSON.stringify(drawings)); if (undoStack.length > 30) undoStack.shift(); }
 
-    // --- DYNAMIC INPUT LOGIC ---
+    // --- UNDO ENGINE ---
+    function saveState() {
+        undoStack.push(JSON.stringify(drawings));
+        if (undoStack.length > 50) undoStack.shift();
+    }
+
+    function undo() {
+        if (undoStack.length > 0) {
+            drawings = JSON.parse(undoStack.pop());
+            refresh();
+            log("Undo performed.");
+        } else {
+            log("Nothing to undo.");
+        }
+    }
+
+    window.addEventListener('keydown', (e) => {
+        if (e.ctrlKey && e.key === 'z') {
+            e.preventDefault();
+            undo();
+        }
+    });
+    document.getElementById('undoBtn').onclick = undo;
+
+    // --- DYNAMIC INPUT & CURSOR ---
     function updateDynamicInput(e) {
         if (!currentMode) { dynInput.style.display = 'none'; return; }
         dynInput.style.display = 'flex';
-        dynInput.style.left = (e.clientX + 15) + 'px';
-        dynInput.style.top = (e.clientY + 15) + 'px';
+        dynInput.style.left = (e.clientX + 20) + 'px';
+        dynInput.style.top = (e.clientY + 20) + 'px';
         
         const c = getCoords(e, points[0]);
-        // Only update values if the user isn't currently typing in them
         if (document.activeElement !== dynX && document.activeElement !== dynY) {
             dynX.value = Math.round(c.x);
             dynY.value = Math.round(c.y);
@@ -125,86 +150,26 @@
         });
     });
 
-    // --- CORE ENGINE ---
-    cmdInput.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') {
-            const input = cmdInput.value.trim();
-            if (input.startsWith('@') && points.length > 0) {
-                const parts = input.substring(1).split(',');
-                if (parts.length === 2) {
-                    const dx = parseFloat(parts[0]), dy = parseFloat(parts[1]);
-                    processPoint({ x: points[0].x + dx, y: points[0].y + dy });
-                }
-            } else {
-                const val = parseFloat(input);
-                if (!isNaN(val)) { offsetDist = val; log(`Value set to: ${val}`); }
-            }
-            cmdInput.value = "";
-        }
-    });
-
-    function processPoint(c) {
-        if (currentMode === 'LINE' || currentMode === 'CIRCLE' || currentMode === 'RECT') {
-            points.push(c);
-            if (points.length === 2) {
-                saveState();
-                const newObj = { type: currentMode, layer: layerSel.value };
-                if (currentMode === 'LINE') { newObj.p1 = {...points[0]}; newObj.p2 = {...points[1]}; }
-                else if (currentMode === 'CIRCLE') { newObj.center = {...points[0]}; newObj.radius = Math.hypot(points[1].x-points[0].x, points[1].y-points[0].y); }
-                else if (currentMode === 'RECT') { newObj.p1 = {...points[0]}; newObj.p2 = {...points[1]}; }
-                
-                drawings.push(newObj);
-                points = []; refresh(); log(`${currentMode} created.`);
-            }
-        }
-    }
-
-    function resize() {
-        const container = document.getElementById('canvas-container');
-        cadCanvas.width = gridCanvas.width = container.offsetWidth;
-        cadCanvas.height = gridCanvas.height = container.offsetHeight;
-        drawGrid(); refresh();
-    }
-
-    function drawGrid() {
-        gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-        if (!gridVisible) return;
-        gCtx.beginPath(); gCtx.strokeStyle = "#e0e0e0"; gCtx.lineWidth = 0.5;
-        for (let x = 0; x <= gridCanvas.width; x += 50) { gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height); }
-        for (let y = 0; y <= gridCanvas.height; y += 50) { gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y); }
-        gCtx.stroke();
-    }
-
-    function findSnap(curX, curY) {
-        let best = null, minDist = 20;
-        const doEnd = document.getElementById('snapEnd').checked;
-        const doMid = document.getElementById('snapMid').checked;
-        drawings.forEach(d => {
-            let pts = [];
-            if (d.type === 'LINE' || d.type === 'RECT') {
-                const p1 = d.p1, p2 = (d.type === 'RECT') ? {x: d.p2.x, y: d.p2.y} : d.p2;
-                if (doEnd) { pts.push({x: p1.x, y: p1.y, type: 'END'}); pts.push({x: d.p2.x, y: d.p2.y, type: 'END'}); 
-                             if(d.type === 'RECT') { pts.push({x: p1.x, y: d.p2.y, type: 'END'}); pts.push({x: d.p2.x, y: p1.y, type: 'END'}); }}
-                if (doMid && d.type === 'LINE') pts.push({x: (p1.x + d.p2.x)/2, y: (p1.y + d.p2.y)/2, type: 'MID'});
-            } else if (d.type === 'CIRCLE' && doEnd) pts.push({x: d.center.x, y: d.center.y, type: 'END'});
-            pts.forEach(p => {
-                const dist = Math.hypot(curX - p.x, curY - p.y);
-                if (dist < minDist) { minDist = dist; best = p; }
-            });
-        });
-        return best;
-    }
-
-    function getCoords(e, relativeToPoint = null) {
-        const rect = cadCanvas.getBoundingClientRect();
-        let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
-        if (activeSnap) { x = activeSnap.x; y = activeSnap.y; }
-        else if (document.getElementById('snapGrid').checked) { x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50; }
-        return { x, y };
-    }
-
+    // --- RENDERING & CROSSHAIR ---
     function refresh() {
         ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+        
+        // Draw custom CAD Crosshair
+        if (mousePos) {
+            const rect = cadCanvas.getBoundingClientRect();
+            const rawX = mousePos.clientX - rect.left;
+            const rawY = mousePos.clientY - rect.top;
+            
+            ctx.beginPath();
+            ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"; // Subtle grey crosshair
+            ctx.lineWidth = 1;
+            // Horizontal line
+            ctx.moveTo(0, rawY); ctx.lineTo(cadCanvas.width, rawY);
+            // Vertical line
+            ctx.moveTo(rawX, 0); ctx.lineTo(rawX, cadCanvas.height);
+            ctx.stroke();
+        }
+
         drawings.forEach(d => {
             ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
             ctx.beginPath(); ctx.strokeStyle = (d === selectedObj) ? "#ff9800" : LAYERS[d.layer].color;
@@ -215,17 +180,20 @@
             ctx.stroke(); ctx.restore();
         });
 
+        // Snap indicator and Preview logic
         if (mousePos) {
             const rect = cadCanvas.getBoundingClientRect();
-            const rawX = mousePos.clientX - rect.left, rawY = cadCanvas.height - (mousePos.clientY - rect.top);
+            const rawX = mousePos.clientX - rect.left;
+            const rawY = cadCanvas.height - (mousePos.clientY - rect.top);
             activeSnap = findSnap(rawX, rawY);
+            
             if (activeSnap) {
                 ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
                 ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2;
-                if (activeSnap.type === 'END') ctx.strokeRect(activeSnap.x-6, activeSnap.y-6, 12, 12);
-                else { ctx.beginPath(); ctx.moveTo(activeSnap.x, activeSnap.y+7); ctx.lineTo(activeSnap.x-7, activeSnap.y-5); ctx.lineTo(activeSnap.x+7, activeSnap.y-5); ctx.closePath(); ctx.stroke(); }
+                ctx.strokeRect(activeSnap.x-6, activeSnap.y-6, 12, 12);
                 ctx.restore();
             }
+
             const cur = getCoords(mousePos, points[0]);
             if (points.length > 0 && currentMode) {
                 ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
@@ -237,14 +205,70 @@
         }
     }
 
+    // --- EVENT LISTENERS ---
+    function processPoint(c) {
+        if (currentMode === 'LINE' || currentMode === 'CIRCLE' || currentMode === 'RECT') {
+            if (points.length === 0) { points.push(c); log("First point set."); }
+            else {
+                saveState();
+                const newObj = { type: currentMode, layer: layerSel.value };
+                if (currentMode === 'LINE') { newObj.p1 = {...points[0]}; newObj.p2 = {...c}; }
+                else if (currentMode === 'CIRCLE') { newObj.center = {...points[0]}; newObj.radius = Math.hypot(c.x-points[0].x, c.y-points[0].y); }
+                else if (currentMode === 'RECT') { newObj.p1 = {...points[0]}; newObj.p2 = {...c}; }
+                drawings.push(newObj);
+                points = []; refresh(); log(`${currentMode} finalized.`);
+            }
+        }
+    }
+
+    function getCoords(e, relativeToPoint = null) {
+        const rect = cadCanvas.getBoundingClientRect();
+        let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
+        if (activeSnap) { x = activeSnap.x; y = activeSnap.y; }
+        else if (document.getElementById('snapGrid').checked) { x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50; }
+        return { x, y };
+    }
+
+    function findSnap(curX, curY) {
+        let best = null, minDist = 20;
+        const doEnd = document.getElementById('snapEnd').checked;
+        drawings.forEach(d => {
+            let pts = [];
+            if (d.type === 'LINE' || d.type === 'RECT') {
+                pts.push({x: d.p1.x, y: d.p1.y}); pts.push({x: d.p2.x, y: d.p2.y});
+            }
+            pts.forEach(p => {
+                const dist = Math.hypot(curX - p.x, curY - p.y);
+                if (dist < minDist) { minDist = dist; best = p; }
+            });
+        });
+        return best;
+    }
+
     cadCanvas.addEventListener('pointermove', (e) => { mousePos = e; updateDynamicInput(e); refresh(); });
     cadCanvas.addEventListener('pointerdown', (e) => { processPoint(getCoords(e, points[0])); });
+
     document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); };
     document.getElementById('lineBtn').onclick = function() { currentMode = 'LINE'; points = []; setAct(this); };
     document.getElementById('circleBtn').onclick = function() { currentMode = 'CIRCLE'; points = []; setAct(this); };
     document.getElementById('rectBtn').onclick = function() { currentMode = 'RECT'; points = []; setAct(this); };
     function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-    document.getElementById('clearBtn').onclick = () => { drawings = []; refresh(); log("Cleared."); };
+    
+    function drawGrid() {
+        gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
+        if (!gridVisible) return;
+        gCtx.beginPath(); gCtx.strokeStyle = "#e0e0e0"; gCtx.lineWidth = 0.5;
+        for (let x = 0; x <= gridCanvas.width; x += 50) { gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height); }
+        for (let y = 0; y <= gridCanvas.height; y += 50) { gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y); }
+        gCtx.stroke();
+    }
+
+    function resize() {
+        const container = document.getElementById('canvas-container');
+        cadCanvas.width = gridCanvas.width = container.offsetWidth;
+        cadCanvas.height = gridCanvas.height = container.offsetHeight;
+        drawGrid(); refresh();
+    }
 
     window.addEventListener('resize', resize);
     window.addEventListener('load', resize);
