@@ -1,277 +1,474 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>GSD-Lite PRO | v4.3.1 - Restoration</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Estimativa das jornadas de trabalho da mulher do século XXI</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
-        :root { --bg: #2b2b2b; --panel: #1e1e1e; --accent: #0078d4; --text: #ffffff; }
-        html, body { height: 100%; margin: 0; padding: 0; overflow: hidden; background: var(--bg); font-family: 'Segoe UI', sans-serif; touch-action: none; }
+        /* Base e Layout Responsivo */
+        body { font-family: Arial, sans-serif; background-color: #f4f7f6; color: #333; margin: 10px; font-size: 16px; }
+        .container { max-width: 1200px; margin: auto; background: white; padding: 20px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); position: relative; }
         
-        .toolbar { position: fixed; top: 10px; left: 10px; z-index: 1000; display: flex; flex-wrap: wrap; gap: 8px; background: rgba(30, 30, 30, 0.95); padding: 10px; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); border: 1px solid #444; }
-        button, select, .snap-dropdown { background: #3c3c3c; color: white; border: 1px solid #555; padding: 10px 14px; cursor: pointer; border-radius: 4px; display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 600; transition: 0.2s; position: relative; }
-        button.active { background: var(--accent); border-color: #00aaff; }
+        h2 { color: #2c3e50; border-bottom: 2px solid #3498db; padding-bottom: 10px; font-size: 1.8rem; }
+        .section { margin-bottom: 20px; padding: 20px; border: 1px solid #ddd; border-radius: 5px; }
         
-        .snap-menu { display: none; position: absolute; top: 100%; left: 0; background: #252525; border: 1px solid #555; border-radius: 4px; padding: 8px; z-index: 1100; min-width: 140px; box-shadow: 0 8px 16px rgba(0,0,0,0.4); }
-        .snap-dropdown:hover .snap-menu { display: block; }
-        .snap-item { display: flex; align-items: center; gap: 8px; padding: 5px; color: #ccc; font-size: 11px; cursor: pointer; }
+        label { display: block; margin: 15px 0 5px; font-weight: bold; font-size: 1.1rem; }
+        select, button, input[type="date"] { width: 100%; padding: 14px; margin-top: 5px; border-radius: 4px; border: 1px solid #ccc; font-size: 1.1rem; box-sizing: border-box; }
         
-        /* Fixed Cursor Visibility */
-        #canvas-container { 
-            flex-grow: 1; 
-            position: relative; 
-            background: #ffffff; 
-            width: 100vw; 
-            height: calc(100vh - 140px); 
-            cursor: none; /* We will draw a custom crosshair on canvas for better precision */
-        }
-        canvas { position: absolute; top: 0; left: 0; touch-action: none; }
+        button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 20px; }
+        button:hover { background-color: #2980b9; }
         
-        #dynamic-input {
-            position: absolute;
-            pointer-events: none;
-            display: none;
-            gap: 5px;
-            background: rgba(30, 30, 30, 0.9);
-            padding: 6px;
-            border-radius: 4px;
-            border: 1px solid var(--accent);
-            z-index: 2000;
-        }
-        .dyn-box { width: 60px; border: 1px solid #555; background: #000; color: #00ff00; font-family: 'Consolas', monospace; font-size: 12px; padding: 3px; outline: none; pointer-events: auto; }
+        /* Resultados e Gráficos */
+        #areaResultados { display: none; margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px; }
+        
+        /* Filtros de Resultado */
+        .filter-section { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 
-        #bottom-panel { height: 140px; display: flex; flex-direction: column; z-index: 100; }
-        #terminal { flex-grow: 1; background: #121212; color: #00ff00; padding: 10px; font-family: 'Consolas', monospace; overflow-y: auto; font-size: 13px; border-top: 2px solid #444; }
-        #input-area { background: var(--panel); padding: 10px 15px; display: flex; align-items: center; border-top: 1px solid #333; }
-        #cmdInput { flex-grow: 1; background: transparent; color: #fff; border: none; outline: none; font-family: 'Consolas', monospace; font-size: 16px; }
+        .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
+        .stat-card { background: #ecf0f1; padding: 20px; text-align: center; border-radius: 4px; border-left: 5px solid #3498db; font-size: 1.1rem; }
+        .stat-card strong { font-size: 1.5rem; }
+        
+        .charts-container { display: grid; grid-template-columns: repeat(auto-fit, minmax(400px, 1fr)); gap: 25px; margin-top: 25px; }
+        .chart-box { background: #fff; padding: 15px; border: 1px solid #ddd; border-radius: 5px; min-height: 400px; }
+
+        .table-container { overflow-x: auto; margin-top: 35px; border: 1px solid #ddd; }
+        table { width: 100%; border-collapse: collapse; font-size: 1rem; min-width: 800px; }
+        th, td { border: 1px solid #ddd; padding: 12px; text-align: center; }
+        th { background-color: #3498db; color: white; }
+        tfoot tr { background-color: #e8f4fd; font-weight: bold; }
+        tr:nth-child(even) { background-color: #f9f9f9; }
+        
+        /* Botões Secretos */
+        .dot-btn { 
+            position: fixed; bottom: 15px; width: 12px; height: 12px; 
+            border: none; border-radius: 50%; cursor: pointer; opacity: 0.4;
+            transition: opacity 0.3s; z-index: 1000;
+        }
+        .dot-btn:hover { opacity: 1; }
+        .clear-btn { right: 15px; background-color: #e74c3c; }
+        .view-btn { left: 15px; background-color: #2ecc71; }
+
+        .btn-print { background-color: #7f8c8d; margin-bottom: 25px; width: auto; padding: 10px 25px; }
+
+        /* MODO COMPUTADOR AMPLIADO */
+        @media (min-width: 992px) {
+            body { font-size: 24px; padding: 40px; }
+            .container { padding: 40px; max-width: 1400px; }
+            h2 { font-size: 3rem; padding-bottom: 20px; }
+            .section { padding: 40px; margin-bottom: 40px; }
+            label { font-size: 1.6rem; margin: 25px 0 10px; }
+            select, button, input[type="date"] { font-size: 1.5rem; padding: 22px; border-radius: 8px; }
+            .stat-card { padding: 30px; font-size: 1.5rem; }
+            .stat-card strong { font-size: 2.5rem; }
+            .chart-box { padding: 30px; min-height: 500px; }
+            table { font-size: 1.4rem; }
+            th, td { padding: 20px; }
+            h3 { font-size: 2rem; margin-top: 40px; }
+        }
+
+        @media (max-width: 600px) {
+            h2 { font-size: 1.4rem; }
+            .filter-section { grid-template-columns: 1fr; }
+            .charts-container { grid-template-columns: 1fr; }
+            .chart-box { min-height: 300px; }
+        }
+
+        @media print {
+            body { background: white; margin: 0; padding: 0; font-size: 12pt; }
+            .container { box-shadow: none; border: none; max-width: 100%; padding: 0; }
+            .section, .dot-btn, .btn-print, .filter-section, p { display: none !important; }
+            #areaResultados { display: block !important; margin-top: 0; border: none; }
+            .chart-box { page-break-inside: avoid; border: none; min-height: auto; }
+            table { min-width: 100%; font-size: 10pt; }
+            h2 { font-size: 20pt; text-align: center; }
+        }
     </style>
 </head>
 <body>
 
-<div class="toolbar">
-    <button id="lineBtn">LINE</button>
-    <button id="circleBtn">CIRCLE</button>
-    <button id="rectBtn">RECT</button>
-    <button id="undoBtn" style="background: #455a64;">UNDO (Ctrl+Z)</button>
-    <button id="moveBtn" style="background: #6a1b9a;">MOVE</button>
-    <button id="trimBtn" style="background: #c62828;">TRIM</button>
-    <button id="offsetBtn" style="background: #2e7d32;">OFFSET</button>
-    <select id="layerSel"><option value="0">Layer 0</option><option value="HIDDEN">Hidden</option><option value="DIM">Dimensions</option></select>
-    <select id="unitSel"><option value="1">mm</option><option value="0.1">cm</option></select>
-    <button id="gridBtn" class="active">GRID</button>
-    <div class="snap-dropdown">
-        SNAP OPTIONS ▾
-        <div class="snap-menu">
-            <label class="snap-item"><input type="checkbox" id="snapGrid"> Snap to Grid</label>
-            <label class="snap-item"><input type="checkbox" id="snapEnd" checked> Endpoint</label>
-            <label class="snap-item"><input type="checkbox" id="snapMid" checked> Midpoint</label>
+<div class="container">
+    <h2>Pesquisa: Jornadas da Mulher do Século XXI</h2>
+    <p>Estimativa das jornadas de trabalho da mulher do século XXI.</p>
+
+    <div class="section">
+        <label>Selecione o Perfil do Entrevistado:</label>
+        <select id="perfil" onchange="toggleFields()">
+            <option value="">-- Selecione --</option>
+            <option value="Esposa">Esposa</option>
+            <option value="Autonoma">Mulher (Gestão exclusiva e autônoma do lar)</option>
+            <option value="Esposo">Esposo</option>
+            <option value="Familiar">Familiar (Filho, Irmão, etc)</option>
+        </select>
+
+        <div id="detalhePerfil" style="display:none; margin-top:10px;">
+            <label id="labelDetalhe">Tipo de Atividade:</label>
+            <select id="valorDetalhe"></select>
+        </div>
+
+        <div id="camposComuns" style="display:none;">
+            <div id="grupoAjuda">
+                <label>Recebe ajuda nas tarefas domésticas?</label>
+                <select id="recebeAjuda">
+                    <option value="">--</option>
+                    <option value="Sim">Sim</option>
+                    <option value="Não">Não</option>
+                </select>
+            </div>
+
+            <label>Contribui ativamente nas tarefas domésticas?</label>
+            <select id="contribuiTarefa">
+                <option value="">--</option>
+                <option value="Sim">Sim</option>
+                <option value="Não">Não</option>
+            </select>
+            
+            <div id="grupoHoras">
+                <label>Carga horária diária total:</label>
+                <select id="horasGeral">
+                    <option value="">--</option>
+                    <option value="Até 8h">Até 8h</option>
+                    <option value="8h até 14h">8h até 14h</option>
+                    <option value="Mais de 14h">Mais de 14h</option>
+                </select>
+            </div>
+        </div>
+
+        <button onclick="salvarPesquisa()">Salvar Respostas</button>
+    </div>
+
+    <div id="areaResultados">
+        <button class="btn-print" onclick="window.print()">🖨️ Imprimir Relatório</button>
+        
+        <div class="filter-section">
+            <div>
+                <label>Filtrar por Tipo de Atividade:</label>
+                <select id="filtroAtividade" onchange="atualizarInterface()">
+                    <option value="Todos">Todas as Atividades</option>
+                    <option value="Trabalha fora e no lar">Trabalha fora e no lar</option>
+                    <option value="Somente no lar">Somente no lar</option>
+                    <option value="Gestão Autônoma">Gestão Autônoma</option>
+                    <option value="Cônjuge">Cônjuge (Esposo)</option>
+                    <option value="Familiar">Familiar</option>
+                </select>
+            </div>
+            <div>
+                <label>Ver Participação por Data:</label>
+                <input type="date" id="filtroData" onchange="atualizarInterface()">
+            </div>
+        </div>
+
+       <div class="stats-grid">
+            <div class="stat-card">Esposas: <br><strong id="totalM">0</strong></div>
+            <div class="stat-card">Autônomas: <br><strong id="totalA">0</strong></div>
+            <div class="stat-card">Esposos: <br><strong id="totalH">0</strong></div>
+            <div class="stat-card">Familiares: <br><strong id="totalF">0</strong></div>
+        </div>
+
+        <h3 id="tituloData">Participação em: --/--/----</h3>
+        <div class="stats-grid" style="border: 2px solid #3498db; padding: 10px; border-radius: 8px; background: #f0f7ff;">
+            <div class="stat-card" style="border-left-color: #e91e63;">Esposas (Data): <br><strong id="dataM">0</strong></div>
+            <div class="stat-card" style="border-left-color: #2ecc71;">Autônomas (Data): <br><strong id="dataA">0</strong></div>
+            <div class="stat-card" style="border-left-color: #2980b9;">Esposos (Data): <br><strong id="dataH">0</strong></div>
+            <div class="stat-card" style="border-left-color: #9b59b6;">Familiares (Data): <br><strong id="dataF">0</strong></div>
+        </div>
+
+        <div class="charts-container">
+            <div class="chart-box"><canvas id="barChart"></canvas></div>
+            <div class="chart-box"><canvas id="pieChart"></canvas></div>
+            <div class="chart-box"><canvas id="hoursChart"></canvas></div>
+            <div class="chart-box"><canvas id="womenContribChart"></canvas></div>
+            <div class="chart-box"><canvas id="menContribChart"></canvas></div>
+            <div class="chart-box"><canvas id="famContribChart"></canvas></div>
+        </div>
+
+        <h3>Relatório Acumulado</h3>
+        <div class="table-container">
+            <table id="tabelaRelatorio">
+                <thead>
+                    <tr>
+                        <th>Perfil</th>
+                        <th>Ajuda (Sim)</th>
+                        <th>Contribui (Sim)</th>
+                        <th>Até 8h</th>
+                        <th>8h-14h</th>
+                        <th>+14h</th>
+                        <th>Total</th>
+                    </tr>
+                </thead>
+                <tbody id="corpoTabela"></tbody>
+                <tfoot id="rodapeTabela">
+                    <tr>
+                        <td colspan="6" style="text-align: right;">Participantes na data selecionada:</td>
+                        <td id="totalDataCount">0</td>
+                    </tr>
+                </tfoot>
+            </table>
         </div>
     </div>
-    <button id="clearBtn" style="color: #ff6b6b;">CLEAR</button>
+
+    <button class="dot-btn view-btn" onclick="toggleRelatorio()" title="Acesso aos Resultados"></button>
+    <button class="dot-btn clear-btn" onclick="limparDados()" title="Limpar Banco"></button>
 </div>
 
-<div id="canvas-container">
-    <canvas id="gridCanvas"></canvas>
-    <canvas id="cadCanvas"></canvas>
-    
-    <div id="dynamic-input">
-        <input type="text" id="dynX" class="dyn-box" placeholder="X">
-        <input type="text" id="dynY" class="dyn-box" placeholder="Y">
-    </div>
-</div>
-
-<div id="bottom-panel">
-    <div id="terminal">GSD-Lite PRO v4.3.1. Cursor and Ctrl+Z Fixed.</div>
-    <div id="input-area">
-        <span style="color:#00aaff; font-weight:bold; margin-right:10px;">COMMAND ></span>
-        <input type="text" id="cmdInput" autofocus placeholder="Type value, @x,y or press Ctrl+Z...">
-    </div>
-</div>
 <script>
-    const cadCanvas = document.getElementById('cadCanvas'), gridCanvas = document.getElementById('gridCanvas');
-    const ctx = cadCanvas.getContext('2d'), gCtx = gridCanvas.getContext('2d');
-    const terminal = document.getElementById('terminal'), layerSel = document.getElementById('layerSel');
-    const unitSel = document.getElementById('unitSel'), cmdInput = document.getElementById('cmdInput');
-    const dynInput = document.getElementById('dynamic-input'), dynX = document.getElementById('dynX'), dynY = document.getElementById('dynY');
+    let db = JSON.parse(localStorage.getItem('pesquisaODS')) || [];
+    const SENHA_MESTRA = "210109"; 
+    let charts = {};
 
-    let gridVisible = true, currentMode = null;
-    let points = [], drawings = [], undoStack = [], mousePos = null;
-    let selectedObj = null, offsetDist = 20, activeSnap = null;
+    // Define data de hoje no calendário por padrão
+    document.getElementById('filtroData').valueAsDate = new Date();
 
-    const LAYERS = { "0": { color: "#000", dash: [] }, "HIDDEN": { color: "#888", dash: [5, 5] }, "DIM": { color: "#f00", dash: [] } };
+    function toggleFields() {
+        const perfil = document.getElementById('perfil').value;
+        const divDetalhe = document.getElementById('detalhePerfil');
+        const selectDetalhe = document.getElementById('valorDetalhe');
+        const labelDetalhe = document.getElementById('labelDetalhe');
+        const camposComuns = document.getElementById('camposComuns');
+        const grupoAjuda = document.getElementById('grupoAjuda');
+        const grupoHoras = document.getElementById('grupoHoras');
 
-    function log(msg) { terminal.innerHTML += `<br>>> ${msg}`; terminal.scrollTop = terminal.scrollHeight; }
+        if (!perfil) {
+            divDetalhe.style.display = 'none';
+            camposComuns.style.display = 'none';
+            return;
+        }
 
-    // --- UNDO ENGINE ---
-    function saveState() {
-        undoStack.push(JSON.stringify(drawings));
-        if (undoStack.length > 50) undoStack.shift();
-    }
+        divDetalhe.style.display = 'block';
+        camposComuns.style.display = 'block';
+        selectDetalhe.innerHTML = "";
+        selectDetalhe.add(new Option("--", ""));
 
-    function undo() {
-        if (undoStack.length > 0) {
-            drawings = JSON.parse(undoStack.pop());
-            refresh();
-            log("Undo performed.");
+        if (perfil === 'Esposo' || perfil === 'Familiar') {
+            grupoAjuda.style.display = 'none';
+            grupoHoras.style.display = 'none';
         } else {
-            log("Nothing to undo.");
+            grupoAjuda.style.display = 'block';
+            grupoHoras.style.display = 'block';
+        }
+
+        if (perfil === 'Esposa') {
+            labelDetalhe.innerText = "Tipo de Jornada:";
+            ["Trabalha fora e no lar", "Somente no lar"].forEach(o => selectDetalhe.add(new Option(o, o)));
+        } else if (perfil === 'Autonoma') {
+            labelDetalhe.innerText = "Tipo de Jornada:";
+            selectDetalhe.add(new Option("Gestão exclusiva e autônoma do lar", "Gestão Autônoma"));
+        } else if (perfil === 'Esposo') {
+            labelDetalhe.innerText = "Papel:";
+            selectDetalhe.add(new Option("Cônjuge", "Cônjuge"));
+        } else {
+            labelDetalhe.innerText = "Grau:";
+            selectDetalhe.add(new Option("Familiar Próximo", "Familiar"));
         }
     }
 
-    window.addEventListener('keydown', (e) => {
-        if (e.ctrlKey && e.key === 'z') {
-            e.preventDefault();
-            undo();
-        }
-    });
-    document.getElementById('undoBtn').onclick = undo;
-
-    // --- DYNAMIC INPUT & CURSOR ---
-    function updateDynamicInput(e) {
-        if (!currentMode) { dynInput.style.display = 'none'; return; }
-        dynInput.style.display = 'flex';
-        dynInput.style.left = (e.clientX + 20) + 'px';
-        dynInput.style.top = (e.clientY + 20) + 'px';
-        
-        const c = getCoords(e, points[0]);
-        if (document.activeElement !== dynX && document.activeElement !== dynY) {
-            dynX.value = Math.round(c.x);
-            dynY.value = Math.round(c.y);
-        }
+    function toggleRelatorio() {
+        const pass = prompt("!");
+        const area = document.getElementById('areaResultados');
+        if (pass === SENHA_MESTRA) {
+            area.style.display = area.style.display === 'none' ? 'block' : 'none';
+            if(area.style.display === 'block') setTimeout(atualizarInterface, 100);
+        } else if (pass !== null) alert("Código incorreto.");
     }
 
-    [dynX, dynY].forEach(el => {
-        el.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') {
-                const c = { x: parseFloat(dynX.value), y: parseFloat(dynY.value) };
-                if (!isNaN(c.x) && !isNaN(c.y)) processPoint(c);
-                cadCanvas.focus();
-            }
-        });
-    });
+    function salvarPesquisa() {
+        const perfilSelect = document.getElementById('perfil');
+        if (!perfilSelect.value) return alert("Selecione o perfil.");
 
-    // --- RENDERING & CROSSHAIR ---
-    function refresh() {
-        ctx.clearRect(0, 0, cadCanvas.width, cadCanvas.height);
+        let registro = {
+            perfil: perfilSelect.value,
+            detalhe: document.getElementById('valorDetalhe').value,
+            recebeuAjuda: document.getElementById('recebeAjuda').value,
+            contribuiu: document.getElementById('contribuiTarefa').value,
+            horas: document.getElementById('horasGeral').value,
+            data: new Date().toISOString().split('T')[0] // Salva YYYY-MM-DD
+        };
+
+        db.push(registro);
+        localStorage.setItem('pesquisaODS', JSON.stringify(db));
         
-        // Draw custom CAD Crosshair
-        if (mousePos) {
-            const rect = cadCanvas.getBoundingClientRect();
-            const rawX = mousePos.clientX - rect.left;
-            const rawY = mousePos.clientY - rect.top;
-            
-            ctx.beginPath();
-            ctx.strokeStyle = "rgba(0, 0, 0, 0.2)"; // Subtle grey crosshair
-            ctx.lineWidth = 1;
-            // Horizontal line
-            ctx.moveTo(0, rawY); ctx.lineTo(cadCanvas.width, rawY);
-            // Vertical line
-            ctx.moveTo(rawX, 0); ctx.lineTo(rawX, cadCanvas.height);
-            ctx.stroke();
-        }
+        perfilSelect.value = "";
+        document.getElementById('recebeAjuda').value = "";
+        document.getElementById('contribuiTarefa').value = "";
+        document.getElementById('horasGeral').value = "";
+        toggleFields();
+        atualizarInterface();
+        alert("Dados salvos!");
+    }
 
-        drawings.forEach(d => {
-            ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
-            ctx.beginPath(); ctx.strokeStyle = (d === selectedObj) ? "#ff9800" : LAYERS[d.layer].color;
-            ctx.setLineDash(LAYERS[d.layer].dash); ctx.lineWidth = (d === selectedObj) ? 3 : 2;
-            if (d.type === 'LINE') { ctx.moveTo(d.p1.x, d.p1.y); ctx.lineTo(d.p2.x, d.p2.y); }
-            else if (d.type === 'CIRCLE') { ctx.arc(d.center.x, d.center.y, d.radius, 0, Math.PI * 2); }
-            else if (d.type === 'RECT') { ctx.strokeRect(d.p1.x, d.p1.y, d.p2.x - d.p1.x, d.p2.y - d.p1.y); }
-            ctx.stroke(); ctx.restore();
+    function atualizarInterface() {
+        const corpo = document.getElementById('corpoTabela');
+        if (!corpo) return;
+        corpo.innerHTML = "";
+        
+        const filtro = document.getElementById('filtroAtividade').value;
+        const filtroData = document.getElementById('filtroData').value;
+        
+        // --- Calculation for the Date-Specific Grid ---
+        const dataFormatada = filtroData.split('-').reverse().join('/');
+        document.getElementById('tituloData').innerText = `Participação em: ${dataFormatada}`;
+
+        const dadosNaData = db.filter(i => i.data === filtroData);
+        document.getElementById('totalDataCount').innerText = dadosNaData.length;
+
+        // Update the Secondary Stat Cards (By Date)
+        document.getElementById('dataM').innerText = dadosNaData.filter(i => i.perfil === 'Esposa').length;
+        document.getElementById('dataA').innerText = dadosNaData.filter(i => i.perfil === 'Autonoma').length;
+        document.getElementById('dataH').innerText = dadosNaData.filter(i => i.perfil === 'Esposo').length;
+        document.getElementById('dataF').innerText = dadosNaData.filter(i => i.perfil === 'Familiar').length;
+        // --- ---
+        
+        const dadosFiltrados = filtro === "Todos" ? db : db.filter(i => i.detalhe === filtro);
+        const countPorData = db.filter(i => i.data === filtroData).length;
+        document.getElementById('totalDataCount').innerText = countPorData;
+
+        const categorias = [
+            { label: "Esposa", key: 'Esposa' },
+            { label: "Autônoma", key: 'Autonoma' },
+            { label: "Esposo", key: 'Esposo' },
+            { label: "Familiares", key: 'Familiar' }
+        ];
+
+        let totaisGerais = { Esposa: 0, Autonoma: 0, Esposo: 0, Familiar: 0 };
+        let dadosPerfis = [];
+
+        categorias.forEach(cat => {
+            const itens = dadosFiltrados.filter(i => i.perfil === cat.key);
+            const count = itens.length;
+            totaisGerais[cat.key] = count;
+            dadosPerfis.push(count);
+
+            corpo.innerHTML += `
+                <tr>
+                    <td style="text-align:left; font-weight:bold;">${cat.label}</td>
+                    <td>${itens.filter(i => i.recebeuAjuda === 'Sim').length}</td>
+                    <td>${itens.filter(i => i.contribuiu === 'Sim').length}</td>
+                    <td>${itens.filter(i => i.horas === 'Até 8h').length}</td>
+                    <td>${itens.filter(i => i.horas === '8h até 14h').length}</td>
+                    <td>${itens.filter(i => i.horas === 'Mais de 14h').length}</td>
+                    <td style="background:#eee; font-weight:bold;">${count}</td>
+                </tr>`;
         });
 
-        // Snap indicator and Preview logic
-        if (mousePos) {
-            const rect = cadCanvas.getBoundingClientRect();
-            const rawX = mousePos.clientX - rect.left;
-            const rawY = cadCanvas.height - (mousePos.clientY - rect.top);
-            activeSnap = findSnap(rawX, rawY);
-            
-            if (activeSnap) {
-                ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
-                ctx.strokeStyle = "#00ff00"; ctx.lineWidth = 2;
-                ctx.strokeRect(activeSnap.x-6, activeSnap.y-6, 12, 12);
+        document.getElementById('totalM').innerText = totaisGerais.Esposa;
+        document.getElementById('totalA').innerText = totaisGerais.Autonoma;
+        document.getElementById('totalH').innerText = totaisGerais.Esposo;
+        document.getElementById('totalF').innerText = totaisGerais.Familiar;
+
+        gerarGraficos(categorias.map(c => c.label), dadosPerfis, dadosFiltrados);
+    }
+
+    function criarOuAtualizarGrafico(id, type, label, labels, data, colors) {
+        if (charts[id]) charts[id].destroy();
+        
+        const dataValuePlugin = {
+            id: 'dataValuePlugin',
+            afterDatasetsDraw(chart) {
+                const { ctx } = chart;
+                ctx.save();
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                chart.data.datasets.forEach((dataset, i) => {
+                    const total = dataset.data.reduce((acc, val) => acc + val, 0);
+                    chart.getDatasetMeta(i).data.forEach((element, index) => {
+                        const value = dataset.data[index];
+                        if (value === 0) return;
+                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '';
+                        const text = `${value} (${percentage})`;
+                        let x, y;
+                        if (type === 'bar') {
+                            ctx.fillStyle = '#333';
+                            x = element.x;
+                            y = element.y - 15;
+                        } else {
+                            const { x: centerX, y: centerY } = element.tooltipPosition();
+                            ctx.fillStyle = '#fff';
+                            x = centerX;
+                            y = centerY;
+                        }
+                        ctx.fillText(text, x, y);
+                    });
+                });
                 ctx.restore();
             }
+        };
 
-            const cur = getCoords(mousePos, points[0]);
-            if (points.length > 0 && currentMode) {
-                ctx.save(); ctx.translate(0, cadCanvas.height); ctx.scale(1, -1);
-                ctx.setLineDash([5,5]); ctx.strokeStyle = "#0078d4";
-                if (currentMode === 'LINE') { ctx.beginPath(); ctx.moveTo(points[0].x, points[0].y); ctx.lineTo(cur.x, cur.y); ctx.stroke(); }
-                else if (currentMode === 'RECT') { ctx.strokeRect(points[0].x, points[0].y, cur.x - points[0].x, cur.y - points[0].y); }
-                ctx.restore();
+        charts[id] = new Chart(document.getElementById(id).getContext('2d'), {
+            type: type,
+            data: {
+                labels: labels,
+                datasets: [{ 
+                    label: label, 
+                    data: data, 
+                    backgroundColor: colors,
+                    borderWidth: 1,
+                    borderColor: '#fff'
+                }]
+            },
+            plugins: [dataValuePlugin],
+            options: { 
+                responsive: true, 
+                maintainAspectRatio: false, 
+                animation: { duration: 0 },
+                plugins: {
+                    title: {
+                        display: true,
+                        text: label,
+                        font: { size: 18, weight: 'bold' },
+                        padding: { top: 10, bottom: 30 }
+                    },
+                    legend: {
+                        display: true,
+                        position: 'bottom',
+                        labels: { font: { size: 14 } }
+                    },
+                    tooltip: { enabled: true }
+                },
+                scales: type === 'bar' ? {
+                    y: { beginAtZero: true, grace: '15%', ticks: { precision: 0 } }
+                } : {}
             }
-        }
-    }
-
-    // --- EVENT LISTENERS ---
-    function processPoint(c) {
-        if (currentMode === 'LINE' || currentMode === 'CIRCLE' || currentMode === 'RECT') {
-            if (points.length === 0) { points.push(c); log("First point set."); }
-            else {
-                saveState();
-                const newObj = { type: currentMode, layer: layerSel.value };
-                if (currentMode === 'LINE') { newObj.p1 = {...points[0]}; newObj.p2 = {...c}; }
-                else if (currentMode === 'CIRCLE') { newObj.center = {...points[0]}; newObj.radius = Math.hypot(c.x-points[0].x, c.y-points[0].y); }
-                else if (currentMode === 'RECT') { newObj.p1 = {...points[0]}; newObj.p2 = {...c}; }
-                drawings.push(newObj);
-                points = []; refresh(); log(`${currentMode} finalized.`);
-            }
-        }
-    }
-
-    function getCoords(e, relativeToPoint = null) {
-        const rect = cadCanvas.getBoundingClientRect();
-        let x = e.clientX - rect.left, y = cadCanvas.height - (e.clientY - rect.top);
-        if (activeSnap) { x = activeSnap.x; y = activeSnap.y; }
-        else if (document.getElementById('snapGrid').checked) { x = Math.round(x / 50) * 50; y = Math.round(y / 50) * 50; }
-        return { x, y };
-    }
-
-    function findSnap(curX, curY) {
-        let best = null, minDist = 20;
-        const doEnd = document.getElementById('snapEnd').checked;
-        drawings.forEach(d => {
-            let pts = [];
-            if (d.type === 'LINE' || d.type === 'RECT') {
-                pts.push({x: d.p1.x, y: d.p1.y}); pts.push({x: d.p2.x, y: d.p2.y});
-            }
-            pts.forEach(p => {
-                const dist = Math.hypot(curX - p.x, curY - p.y);
-                if (dist < minDist) { minDist = dist; best = p; }
-            });
         });
-        return best;
     }
 
-    cadCanvas.addEventListener('pointermove', (e) => { mousePos = e; updateDynamicInput(e); refresh(); });
-    cadCanvas.addEventListener('pointerdown', (e) => { processPoint(getCoords(e, points[0])); });
+    function gerarGraficos(labelsPerfis, dadosPerfis, dataSet) {
+        const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', '#e74c3c'];
 
-    document.getElementById('gridBtn').onclick = function() { gridVisible = !gridVisible; this.classList.toggle('active'); drawGrid(); };
-    document.getElementById('lineBtn').onclick = function() { currentMode = 'LINE'; points = []; setAct(this); };
-    document.getElementById('circleBtn').onclick = function() { currentMode = 'CIRCLE'; points = []; setAct(this); };
-    document.getElementById('rectBtn').onclick = function() { currentMode = 'RECT'; points = []; setAct(this); };
-    function setAct(btn) { document.querySelectorAll('.toolbar button').forEach(b => b.classList.remove('active')); btn.classList.add('active'); }
-    
-    function drawGrid() {
-        gCtx.clearRect(0, 0, gridCanvas.width, gridCanvas.height);
-        if (!gridVisible) return;
-        gCtx.beginPath(); gCtx.strokeStyle = "#e0e0e0"; gCtx.lineWidth = 0.5;
-        for (let x = 0; x <= gridCanvas.width; x += 50) { gCtx.moveTo(x, 0); gCtx.lineTo(x, gridCanvas.height); }
-        for (let y = 0; y <= gridCanvas.height; y += 50) { gCtx.moveTo(0, y); gCtx.lineTo(gridCanvas.width, y); }
-        gCtx.stroke();
+        criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
+        criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição de Perfis', labelsPerfis, dadosPerfis, cores);
+
+        const h8 = dataSet.filter(i => i.horas === 'Até 8h').length;
+        const h14 = dataSet.filter(i => i.horas === '8h até 14h').length;
+        const hPlus = dataSet.filter(i => i.horas === 'Mais de 14h').length;
+        criarOuAtualizarGrafico('hoursChart', 'bar', 'Carga Horária Total (Mulheres)', ['Até 8h', '8h-14h', '+14h'], [h8, h14, hPlus], ['#1abc9c', '#f39c12', '#c0392b']);
+
+        const mulheres = dataSet.filter(i => i.perfil === 'Esposa' || i.perfil === 'Autonoma');
+        const mSim = mulheres.filter(i => i.contribuiu === 'Sim').length;
+        const mNao = mulheres.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('womenContribChart', 'pie', 'Contribuição Feminina', ['Contribui', 'Não Contribui'], [mSim, mNao], ['#e91e63', '#f8bbd0']);
+
+        const homens = dataSet.filter(i => i.perfil === 'Esposo');
+        const hSim = homens.filter(i => i.contribuiu === 'Sim').length;
+        const hNao = homens.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('menContribChart', 'pie', 'Contribuição Masculina', ['Contribui', 'Não Contribui'], [hSim, hNao], ['#2980b9', '#bdc3c7']);
+
+        const fams = dataSet.filter(i => i.perfil === 'Familiar');
+        const fSim = fams.filter(i => i.contribuiu === 'Sim').length;
+        const fNao = fams.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('famContribChart', 'pie', 'Contribuição Familiar', ['Contribui', 'Não Contribui'], [fSim, fNao], ['#8e44ad', '#ecf0f1']);
     }
 
-    function resize() {
-        const container = document.getElementById('canvas-container');
-        cadCanvas.width = gridCanvas.width = container.offsetWidth;
-        cadCanvas.height = gridCanvas.height = container.offsetHeight;
-        drawGrid(); refresh();
+    function limparDados() {
+        if (prompt("?") === SENHA_MESTRA && confirm("Apagar histórico?")) {
+            localStorage.removeItem('pesquisaODS');
+            db = [];
+            atualizarInterface();
+        }
     }
 
-    window.addEventListener('resize', resize);
-    window.addEventListener('load', resize);
+    atualizarInterface();
 </script>
 </body>
 </html>
