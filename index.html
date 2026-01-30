@@ -2,11 +2,9 @@
 <html lang="pt-br">
 <head>
     <meta charset="UTF-8">
-     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Estimativa das jornadas de trabalho da mulher do século XXI</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.17.1/firebase-database-compat.js"></script>
     <style>
         /* Base e Layout Responsivo */
         body { font-family: Arial, sans-serif; background-color: #f4f7f6; color: #333; margin: 10px; font-size: 16px; }
@@ -213,37 +211,42 @@
     <button class="dot-btn clear-btn" onclick="limparDados()" title="Limpar Banco"></button>
 </div>
 
-<script>
-    // --- CONFIGURAÇÃO DO FIREBASE ---
-    // Você deve substituir os valores abaixo pelos dados do seu console Firebase
+<script type="module">
+    // Importação dos módulos necessários do Firebase
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+    import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+
+    // Sua configuração do Firebase (conforme gerado no console)
     const firebaseConfig = {
-        apiKey: "SUA_API_KEY",
-        authDomain: "SEU_PROJETO.firebaseapp.com",
-        databaseURL: "https://SEU_PROJETO-default-rtdb.firebaseio.com",
-        projectId: "SEU_PROJETO",
-        storageBucket: "SEU_PROJETO.appspot.com",
-        messagingSenderId: "SEU_ID",
-        appId: "SEU_APP_ID"
+        apiKey: "AIzaSyB6c0Ot1MG-ush0_sVAbhujwBFYS96y2-U",
+        authDomain: "pesquisajornadatrabalhomulher.firebaseapp.com",
+        projectId: "pesquisajornadatrabalhomulher",
+        storageBucket: "pesquisajornadatrabalhomulher.firebasestorage.app",
+        messagingSenderId: "711825338367",
+        appId: "1:711825338367:web:e98bd4a6e3919a2db141ca",
+        databaseURL: "https://pesquisajornadatrabalhomulher-default-rtdb.firebaseio.com/"
     };
 
-    // Inicializar Firebase
-    firebase.initializeApp(firebaseConfig);
-    const database = firebase.database();
+    // Inicializa o Firebase
+    const app = initializeApp(firebaseConfig);
+    const database = getDatabase(app);
+    const pesquisasRef = ref(database, 'pesquisas');
 
-    let db = []; 
+    let db = []; // Variável local para espelhar os dados da nuvem
     const SENHA_MESTRA = "210109"; 
     let charts = {};
 
-    document.getElementById('filtroData').valueAsDate = new Date();
-
-    // Sincronização em Tempo Real: Sempre que o banco mudar, a interface atualiza para todos
-    database.ref('pesquisas').on('value', (snapshot) => {
+    // Sincroniza dados em tempo real da nuvem
+    onValue(pesquisasRef, (snapshot) => {
         const data = snapshot.val();
         db = data ? Object.values(data) : [];
         atualizarInterface();
     });
 
-    function toggleFields() {
+    document.getElementById('filtroData').valueAsDate = new Date();
+
+    // Funções globais precisam ser anexadas à 'window' por estarmos em um script type="module"
+    window.toggleFields = function() {
         const perfil = document.getElementById('perfil').value;
         const divDetalhe = document.getElementById('detalhePerfil');
         const selectDetalhe = document.getElementById('valorDetalhe');
@@ -284,19 +287,18 @@
             labelDetalhe.innerText = "Grau:";
             selectDetalhe.add(new Option("Familiar Próximo", "Familiar"));
         }
-    }
+    };
 
-    function toggleRelatorio() {
+    window.toggleRelatorio = function() {
         const pass = prompt("!");
         const area = document.getElementById('areaResultados');
         if (pass === SENHA_MESTRA) {
             area.style.display = area.style.display === 'none' ? 'block' : 'none';
-            if(area.style.display === 'block') setTimeout(atualizarInterface, 100);
+            if(area.style.display === 'block') setTimeout(window.atualizarInterface, 100);
         } else if (pass !== null) alert("Código incorreto.");
-    }
+    };
 
-    // --- CORREÇÃO: GRAVAÇÃO NO BANCO DE DADOS GLOBAL ---
-    function salvarPesquisa() {
+    window.salvarPesquisa = function() {
         const perfilSelect = document.getElementById('perfil');
         if (!perfilSelect.value) return alert("Selecione o perfil.");
 
@@ -309,20 +311,20 @@
             data: new Date().toISOString().split('T')[0]
         };
 
-        // Envia para o Firebase
-        database.ref('pesquisas').push(registro)
+        // SALVANDO NO FIREBASE (NUVEM)
+        push(pesquisasRef, registro)
             .then(() => {
-                alert("Dados salvos no banco global!");
+                alert("Dados salvos na nuvem!");
                 perfilSelect.value = "";
                 document.getElementById('recebeuAjuda').value = "";
                 document.getElementById('contribuiTarefa').value = "";
                 document.getElementById('horasGeral').value = "";
-                toggleFields();
+                window.toggleFields();
             })
             .catch((error) => alert("Erro ao salvar: " + error.message));
-    }
+    };
 
-    function atualizarInterface() {
+    window.atualizarInterface = function() {
         const corpo = document.getElementById('corpoTabela');
         if (!corpo) return;
         corpo.innerHTML = "";
@@ -347,7 +349,6 @@
             { label: "Esposa", key: 'Esposa' },
             { label: "Autônoma", key: 'Autonoma' },
             { label: "Esposo", key: 'Esposo' },
-
             { label: "Familiares", key: 'Familiar' }
         ];
 
@@ -377,8 +378,34 @@
         document.getElementById('totalH').innerText = totaisGerais.Esposo;
         document.getElementById('totalF').innerText = totaisGerais.Familiar;
 
-        gerarGraficos(categorias.map(c => c.label), dadosPerfis, dadosFiltrados);
-    }
+        window.gerarGraficos(categorias.map(c => c.label), dadosPerfis, dadosFiltrados);
+    };
+
+    window.gerarGraficos = function(labelsPerfis, dadosPerfis, dataSet) {
+        const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', '#e74c3c'];
+        criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
+        criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição de Perfis', labelsPerfis, dadosPerfis, cores);
+
+        const h8 = dataSet.filter(i => i.horas === 'Até 8h').length;
+        const h14 = dataSet.filter(i => i.horas === '8h até 14h').length;
+        const hPlus = dataSet.filter(i => i.horas === 'Mais de 14h').length;
+        criarOuAtualizarGrafico('hoursChart', 'bar', 'Carga Horária Total (Mulheres)', ['Até 8h', '8h-14h', '+14h'], [h8, h14, hPlus], ['#1abc9c', '#f39c12', '#c0392b']);
+
+        const mulheres = dataSet.filter(i => i.perfil === 'Esposa' || i.perfil === 'Autonoma');
+        const mSim = mulheres.filter(i => i.contribuiu === 'Sim').length;
+        const mNao = mulheres.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('womenContribChart', 'pie', 'Contribuição Feminina', ['Contribui', 'Não Contribui'], [mSim, mNao], ['#e91e63', '#f8bbd0']);
+
+        const homens = dataSet.filter(i => i.perfil === 'Esposo');
+        const hSim = homens.filter(i => i.contribuiu === 'Sim').length;
+        const hNao = homens.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('menContribChart', 'pie', 'Contribuição Masculina', ['Contribui', 'Não Contribui'], [hSim, hNao], ['#2980b9', '#bdc3c7']);
+
+        const fams = dataSet.filter(i => i.perfil === 'Familiar');
+        const fSim = fams.filter(i => i.contribuiu === 'Sim').length;
+        const fNao = fams.filter(i => i.contribuiu === 'Não').length;
+        criarOuAtualizarGrafico('famContribChart', 'pie', 'Contribuição Familiar', ['Contribui', 'Não Contribui'], [fSim, fNao], ['#8e44ad', '#ecf0f1']);
+    };
 
     function criarOuAtualizarGrafico(id, type, label, labels, data, colors) {
         if (charts[id]) charts[id].destroy();
@@ -391,7 +418,6 @@
                 ctx.font = 'bold 14px Arial';
                 ctx.textAlign = 'center';
                 ctx.textBaseline = 'middle';
-
                 chart.data.datasets.forEach((dataset, i) => {
                     const total = dataset.data.reduce((acc, val) => acc + val, 0);
                     chart.getDatasetMeta(i).data.forEach((element, index) => {
@@ -421,77 +447,29 @@
             type: type,
             data: {
                 labels: labels,
-                datasets: [{ 
-                    label: label, 
-                    data: data, 
-                    backgroundColor: colors,
-                    borderWidth: 1,
-                    borderColor: '#fff'
-                }]
+                datasets: [{ label: label, data: data, backgroundColor: colors, borderWidth: 1, borderColor: '#fff' }]
             },
             plugins: [dataValuePlugin],
             options: { 
                 responsive: true, 
-
                 maintainAspectRatio: false, 
-
                 animation: { duration: 0 },
                 plugins: {
-                    title: {
-                        display: true,
-                        text: label,
-                        font: { size: 18, weight: 'bold' },
-                        padding: { top: 10, bottom: 30 }
-                    },
-                    legend: {
-                        display: true,
-                        position: 'bottom',
-                        labels: { font: { size: 14 } }
-                    },
-                    tooltip: { enabled: true }
+                    title: { display: true, text: label, font: { size: 18, weight: 'bold' }, padding: { top: 10, bottom: 30 } },
+                    legend: { display: true, position: 'bottom', labels: { font: { size: 14 } } }
                 },
-                scales: type === 'bar' ? {
-                    y: { beginAtZero: true, grace: '15%', ticks: { precision: 0 } }
-                } : {}
+                scales: type === 'bar' ? { y: { beginAtZero: true, grace: '15%', ticks: { precision: 0 } } } : {}
             }
         });
     }
 
-    function gerarGraficos(labelsPerfis, dadosPerfis, dataSet) {
-        const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', '#e74c3c'];
-
-        criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
-        criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição de Perfis', labelsPerfis, dadosPerfis, cores);
-
-        const h8 = dataSet.filter(i => i.horas === 'Até 8h').length;
-        const h14 = dataSet.filter(i => i.horas === '8h até 14h').length;
-        const hPlus = dataSet.filter(i => i.horas === 'Mais de 14h').length;
-        criarOuAtualizarGrafico('hoursChart', 'bar', 'Carga Horária Total (Mulheres)', ['Até 8h', '8h-14h', '+14h'], [h8, h14, hPlus], ['#1abc9c', '#f39c12', '#c0392b']);
-
-        const mulheres = dataSet.filter(i => i.perfil === 'Esposa' || i.perfil === 'Autonoma');
-        const mSim = mulheres.filter(i => i.contribuiu === 'Sim').length;
-        const mNao = mulheres.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('womenContribChart', 'pie', 'Contribuição Feminina', ['Contribui', 'Não Contribui'], [mSim, mNao], ['#e91e63', '#f8bbd0']);
-
-        const homens = dataSet.filter(i => i.perfil === 'Esposo');
-        const hSim = homens.filter(i => i.contribuiu === 'Sim').length;
-        const hNao = homens.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('menContribChart', 'pie', 'Contribuição Masculina', ['Contribui', 'Não Contribui'], [hSim, hNao], ['#2980b9', '#bdc3c7']);
-
-        const fams = dataSet.filter(i => i.perfil === 'Familiar');
-        const fSim = fams.filter(i => i.contribuiu === 'Sim').length;
-        const fNao = fams.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('famContribChart', 'pie', 'Contribuição Familiar', ['Contribui', 'Não Contribui'], [fSim, fNao], ['#8e44ad', '#ecf0f1']);
-    }
-
-    // --- CORREÇÃO: LIMPEZA NO BANCO GLOBAL ---
-    function limparDados() {
-        if (prompt("?") === SENHA_MESTRA && confirm("Apagar histórico global?")) {
-            database.ref('pesquisas').remove()
-                .then(() => alert("Banco de dados resetado."))
-                .catch((e) => alert("Erro ao limpar: " + e.message));
+    window.limparDados = function() {
+        if (prompt("?") === SENHA_MESTRA && confirm("Apagar histórico na nuvem permanentemente?")) {
+            remove(pesquisasRef).then(() => {
+                alert("Banco de dados limpo!");
+            });
         }
-    }
+    };
 </script>
 </body>
 </html>
