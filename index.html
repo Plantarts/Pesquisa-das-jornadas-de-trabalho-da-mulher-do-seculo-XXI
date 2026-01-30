@@ -19,10 +19,8 @@
         button { background-color: #3498db; color: white; border: none; cursor: pointer; font-weight: bold; margin-top: 20px; }
         button:hover { background-color: #2980b9; }
         
-        /* Resultados e Gráficos */
         #areaResultados { display: none; margin-top: 30px; border-top: 2px dashed #ccc; padding-top: 20px; }
         
-        /* Filtros de Resultado */
         .filter-section { background: #f9f9f9; padding: 15px; border-radius: 5px; margin-bottom: 20px; border: 1px solid #eee; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; }
 
         .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px; margin-bottom: 25px; }
@@ -39,7 +37,6 @@
         tfoot tr { background-color: #e8f4fd; font-weight: bold; }
         tr:nth-child(even) { background-color: #f9f9f9; }
         
-        /* Botões Secretos */
         .dot-btn { 
             position: fixed; bottom: 15px; width: 12px; height: 12px; 
             border: none; border-radius: 50%; cursor: pointer; opacity: 0.4;
@@ -51,7 +48,6 @@
 
         .btn-print { background-color: #7f8c8d; margin-bottom: 25px; width: auto; padding: 10px 25px; }
 
-        /* MODO COMPUTADOR AMPLIADO */
         @media (min-width: 992px) {
             body { font-size: 24px; padding: 40px; }
             .container { padding: 40px; max-width: 1400px; }
@@ -158,7 +154,7 @@
             </div>
         </div>
 
-       <div class="stats-grid">
+        <div class="stats-grid">
             <div class="stat-card">Esposas: <br><strong id="totalM">0</strong></div>
             <div class="stat-card">Autônomas: <br><strong id="totalA">0</strong></div>
             <div class="stat-card">Esposos: <br><strong id="totalH">0</strong></div>
@@ -212,11 +208,9 @@
 </div>
 
 <script type="module">
-    // Importação dos módulos necessários do Firebase
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
     import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    // Sua configuração do Firebase (conforme gerado no console)
     const firebaseConfig = {
         apiKey: "AIzaSyB6c0Ot1MG-ush0_sVAbhujwBFYS96y2-U",
         authDomain: "pesquisajornadatrabalhomulher.firebaseapp.com",
@@ -227,25 +221,22 @@
         databaseURL: "https://pesquisajornadatrabalhomulher-default-rtdb.firebaseio.com/"
     };
 
-    // Inicializa o Firebase
     const app = initializeApp(firebaseConfig);
     const database = getDatabase(app);
     const pesquisasRef = ref(database, 'pesquisas');
 
-    let db = []; // Variável local para espelhar os dados da nuvem
+    let db = []; 
     const SENHA_MESTRA = "220508"; 
     let charts = {};
 
-    // Sincroniza dados em tempo real da nuvem
     onValue(pesquisasRef, (snapshot) => {
         const data = snapshot.val();
         db = data ? Object.values(data) : [];
-        atualizarInterface();
+        window.atualizarInterface();
     });
 
     document.getElementById('filtroData').valueAsDate = new Date();
 
-    // Funções globais precisam ser anexadas à 'window' por estarmos em um script type="module"
     window.toggleFields = function() {
         const perfil = document.getElementById('perfil').value;
         const divDetalhe = document.getElementById('detalhePerfil');
@@ -305,18 +296,17 @@
         let registro = {
             perfil: perfilSelect.value,
             detalhe: document.getElementById('valorDetalhe').value,
-            recebeuAjuda: document.getElementById('recebeuAjuda').value,
+            recebeuAjuda: document.getElementById('recebeAjuda').value,
             contribuiu: document.getElementById('contribuiTarefa').value,
             horas: document.getElementById('horasGeral').value,
             data: new Date().toISOString().split('T')[0]
         };
 
-        // SALVANDO NO FIREBASE (NUVEM)
         push(pesquisasRef, registro)
             .then(() => {
                 alert("Dados salvos na nuvem!");
                 perfilSelect.value = "";
-                document.getElementById('recebeuAjuda').value = "";
+                document.getElementById('recebeAjuda').value = "";
                 document.getElementById('contribuiTarefa').value = "";
                 document.getElementById('horasGeral').value = "";
                 window.toggleFields();
@@ -332,7 +322,7 @@
         const filtro = document.getElementById('filtroAtividade').value;
         const filtroData = document.getElementById('filtroData').value;
         
-        const dataFormatada = filtroData.split('-').reverse().join('/');
+        const dataFormatada = filtroData ? filtroData.split('-').reverse().join('/') : "--/--/----";
         document.getElementById('tituloData').innerText = `Participação em: ${dataFormatada}`;
 
         const dadosNaData = db.filter(i => i.data === filtroData);
@@ -383,6 +373,7 @@
 
     window.gerarGraficos = function(labelsPerfis, dadosPerfis, dataSet) {
         const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', '#e74c3c'];
+        
         criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
         criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição de Perfis', labelsPerfis, dadosPerfis, cores);
 
@@ -408,6 +399,9 @@
     };
 
     function criarOuAtualizarGrafico(id, type, label, labels, data, colors) {
+        const ctx = document.getElementById(id);
+        if (!ctx) return;
+
         if (charts[id]) charts[id].destroy();
         
         const dataValuePlugin = {
@@ -443,7 +437,7 @@
             }
         };
 
-        charts[id] = new Chart(document.getElementById(id).getContext('2d'), {
+        charts[id] = new Chart(ctx.getContext('2d'), {
             type: type,
             data: {
                 labels: labels,
