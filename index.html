@@ -208,274 +208,205 @@
 </div>
 
 <script type="module">
-    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-    import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
+   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+import { getDatabase, ref, push, onValue, remove } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-database.js";
 
-    const firebaseConfig = {
-        apiKey: "AIzaSyB6c0Ot1MG-ush0_sVAbhujwBFYS96y2-U",
-        authDomain: "pesquisajornadatrabalhomulher.firebaseapp.com",
-        projectId: "pesquisajornadatrabalhomulher",
-        storageBucket: "pesquisajornadatrabalhomulher.firebasestorage.app",
-        messagingSenderId: "711825338367",
-        appId: "1:711825338367:web:e98bd4a6e3919a2db141ca",
-        databaseURL: "https://pesquisajornadatrabalhomulher-default-rtdb.firebaseio.com/"
-    };
+const firebaseConfig = {
+    apiKey: "AIzaSyB6c0Ot1MG-ush0_sVAbhujwBFYS96y2-U",
+    authDomain: "pesquisajornadatrabalhomulher.firebaseapp.com",
+    projectId: "pesquisajornadatrabalhomulher",
+    storageBucket: "pesquisajornadatrabalhomulher.firebasestorage.app",
+    messagingSenderId: "711825338367",
+    appId: "1:711825338367:web:e98bd4a6e3919a2db141ca",
+    databaseURL: "https://pesquisajornadatrabalhomulher-default-rtdb.firebaseio.com/"
+};
 
-    const app = initializeApp(firebaseConfig);
-    const database = getDatabase(app);
-    const pesquisasRef = ref(database, 'pesquisas');
+const app = initializeApp(firebaseConfig);
+const database = getDatabase(app);
+const pesquisasRef = ref(database, 'pesquisas');
 
-    let db = []; 
-    const SENHA_MESTRA = "220508"; 
-    let charts = {};
+let db = []; 
+const SENHA_MESTRA = "220508"; 
+let charts = {};
 
-    // Sincroniza dados em tempo real e atualiza a variável global do script
-    onValue(pesquisasRef, (snapshot) => {
-        const data = snapshot.val();
-        db = data ? Object.values(data) : [];
-        console.log("Dados carregados:", db.length);
-        
-        // Se a área de resultados estiver visível, atualiza imediatamente
-        if (document.getElementById('areaResultados').style.display === 'block') {
-            window.atualizarInterface();
-        }
-    });
+// Sincronização em tempo real corrigida
+onValue(pesquisasRef, (snapshot) => {
+    const data = snapshot.val();
+    db = data ? Object.values(data) : [];
+    console.log("Dados sincronizados. Total:", db.length);
+    
+    // Atualiza a interface SEMPRE que os dados mudarem, 
+    // independente da área estar visível, para garantir prontidão.
+    window.atualizarInterface();
+});
 
-    document.getElementById('filtroData').valueAsDate = new Date();
+// Inicializa data padrão
+document.addEventListener("DOMContentLoaded", () => {
+    const inputData = document.getElementById('filtroData');
+    if (inputData) inputData.value = new Date().toISOString().split('T')[0];
+});
 
-    window.toggleFields = function() {
-        const perfil = document.getElementById('perfil').value;
-        const divDetalhe = document.getElementById('detalhePerfil');
-        const selectDetalhe = document.getElementById('valorDetalhe');
-        const labelDetalhe = document.getElementById('labelDetalhe');
-        const camposComuns = document.getElementById('camposComuns');
-        const grupoAjuda = document.getElementById('grupoAjuda');
-        const grupoHoras = document.getElementById('grupoHoras');
+window.toggleFields = function() {
+    const perfil = document.getElementById('perfil').value;
+    const divDetalhe = document.getElementById('detalhePerfil');
+    const selectDetalhe = document.getElementById('valorDetalhe');
+    const camposComuns = document.getElementById('camposComuns');
+    const grupoAjuda = document.getElementById('grupoAjuda');
+    const grupoHoras = document.getElementById('grupoHoras');
+    const labelDetalhe = document.getElementById('labelDetalhe');
 
-        if (!perfil) {
-            divDetalhe.style.display = 'none';
-            camposComuns.style.display = 'none';
-            return;
-        }
-
-        divDetalhe.style.display = 'block';
-        camposComuns.style.display = 'block';
-        selectDetalhe.innerHTML = "";
-        selectDetalhe.add(new Option("--", ""));
-
-        if (perfil === 'Esposo' || perfil === 'Familiar') {
-            grupoAjuda.style.display = 'none';
-            grupoHoras.style.display = 'none';
-        } else {
-            grupoAjuda.style.display = 'block';
-            grupoHoras.style.display = 'block';
-        }
-
-        if (perfil === 'Esposa') {
-            labelDetalhe.innerText = "Tipo de Jornada:";
-            ["Trabalha fora e no lar", "Somente no lar"].forEach(o => selectDetalhe.add(new Option(o, o)));
-        } else if (perfil === 'Autonoma') {
-            labelDetalhe.innerText = "Tipo de Jornada:";
-            selectDetalhe.add(new Option("Gestão exclusiva e autônoma do lar", "Gestão Autônoma"));
-        } else if (perfil === 'Esposo') {
-            labelDetalhe.innerText = "Papel:";
-            selectDetalhe.add(new Option("Cônjuge", "Cônjuge"));
-        } else {
-            labelDetalhe.innerText = "Grau:";
-            selectDetalhe.add(new Option("Familiar Próximo", "Familiar"));
-        }
-    };
-
-    window.toggleRelatorio = function() {
-        const pass = prompt("!");
-        const area = document.getElementById('areaResultados');
-        if (pass === SENHA_MESTRA) {
-            area.style.display = area.style.display === 'none' ? 'block' : 'none';
-            if(area.style.display === 'block') {
-                setTimeout(() => window.atualizarInterface(), 100);
-            }
-        } else if (pass !== null) alert("Código incorreto.");
-    };
-
-    window.salvarPesquisa = function() {
-        const perfilSelect = document.getElementById('perfil');
-        if (!perfilSelect.value) return alert("Selecione o perfil.");
-
-        let registro = {
-            perfil: perfilSelect.value,
-            detalhe: document.getElementById('valorDetalhe').value,
-            recebeuAjuda: document.getElementById('recebeAjuda').value,
-            contribuiu: document.getElementById('contribuiTarefa').value,
-            horas: document.getElementById('horasGeral').value,
-            data: new Date().toISOString().split('T')[0]
-        };
-
-        push(pesquisasRef, registro)
-            .then(() => {
-                alert("Dados salvos na nuvem!");
-                perfilSelect.value = "";
-                document.getElementById('recebeAjuda').value = "";
-                document.getElementById('contribuiTarefa').value = "";
-                document.getElementById('horasGeral').value = "";
-                window.toggleFields();
-            })
-            .catch((error) => alert("Erro ao salvar: " + error.message));
-    };
-
-    window.atualizarInterface = function() {
-        const corpo = document.getElementById('corpoTabela');
-        if (!corpo) return;
-        corpo.innerHTML = "";
-        
-        const filtro = document.getElementById('filtroAtividade').value;
-        const filtroData = document.getElementById('filtroData').value;
-        
-        const dataFormatada = filtroData ? filtroData.split('-').reverse().join('/') : "--/--/----";
-        document.getElementById('tituloData').innerText = `Participação em: ${dataFormatada}`;
-
-        // Filtros de dados baseados no array global 'db'
-        const dadosNaData = db.filter(i => i.data === filtroData);
-        document.getElementById('totalDataCount').innerText = dadosNaData.length;
-
-        document.getElementById('dataM').innerText = dadosNaData.filter(i => i.perfil === 'Esposa').length;
-        document.getElementById('dataA').innerText = dadosNaData.filter(i => i.perfil === 'Autonoma').length;
-        document.getElementById('dataH').innerText = dadosNaData.filter(i => i.perfil === 'Esposo').length;
-        document.getElementById('dataF').innerText = dadosNaData.filter(i => i.perfil === 'Familiar').length;
-        
-        const dadosFiltrados = filtro === "Todos" ? db : db.filter(i => i.detalhe === filtro);
-
-        const categorias = [
-            { label: "Esposa", key: 'Esposa' },
-            { label: "Autônoma", key: 'Autonoma' },
-            { label: "Esposo", key: 'Esposo' },
-            { label: "Familiares", key: 'Familiar' }
-        ];
-
-        let totaisGerais = { Esposa: 0, Autonoma: 0, Esposo: 0, Familiar: 0 };
-        let dadosPerfisCount = [];
-
-        categorias.forEach(cat => {
-            const itens = dadosFiltrados.filter(i => i.perfil === cat.key);
-            const count = itens.length;
-            totaisGerais[cat.key] = count;
-            dadosPerfisCount.push(count);
-
-            corpo.innerHTML += `
-                <tr>
-                    <td style="text-align:left; font-weight:bold;">${cat.label}</td>
-                    <td>${itens.filter(i => i.recebeuAjuda === 'Sim').length}</td>
-                    <td>${itens.filter(i => i.contribuiu === 'Sim').length}</td>
-                    <td>${itens.filter(i => i.horas === 'Até 8h').length}</td>
-                    <td>${itens.filter(i => i.horas === '8h até 14h').length}</td>
-                    <td>${itens.filter(i => i.horas === 'Mais de 14h').length}</td>
-                    <td style="background:#eee; font-weight:bold;">${count}</td>
-                </tr>`;
-        });
-
-        document.getElementById('totalM').innerText = totaisGerais.Esposa;
-        document.getElementById('totalA').innerText = totaisGerais.Autonoma;
-        document.getElementById('totalH').innerText = totaisGerais.Esposo;
-        document.getElementById('totalF').innerText = totaisGerais.Familiar;
-
-        window.gerarGraficos(categorias.map(c => c.label), dadosPerfisCount, dadosFiltrados);
-    };
-
-    window.gerarGraficos = function(labelsPerfis, dadosPerfis, dataSet) {
-        const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6', '#f1c40f', '#e74c3c'];
-        
-        criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
-        criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição de Perfis', labelsPerfis, dadosPerfis, cores);
-
-        const h8 = dataSet.filter(i => i.horas === 'Até 8h').length;
-        const h14 = dataSet.filter(i => i.horas === '8h até 14h').length;
-        const hPlus = dataSet.filter(i => i.horas === 'Mais de 14h').length;
-        criarOuAtualizarGrafico('hoursChart', 'bar', 'Carga Horária Total (Mulheres)', ['Até 8h', '8h-14h', '+14h'], [h8, h14, hPlus], ['#1abc9c', '#f39c12', '#c0392b']);
-
-        const mulheres = dataSet.filter(i => i.perfil === 'Esposa' || i.perfil === 'Autonoma');
-        const mSim = mulheres.filter(i => i.contribuiu === 'Sim').length;
-        const mNao = mulheres.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('womenContribChart', 'pie', 'Contribuição Feminina', ['Contribui', 'Não Contribui'], [mSim, mNao], ['#e91e63', '#f8bbd0']);
-
-        const homens = dataSet.filter(i => i.perfil === 'Esposo');
-        const hSim = homens.filter(i => i.contribuiu === 'Sim').length;
-        const hNao = homens.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('menContribChart', 'pie', 'Contribuição Masculina', ['Contribui', 'Não Contribui'], [hSim, hNao], ['#2980b9', '#bdc3c7']);
-
-        const fams = dataSet.filter(i => i.perfil === 'Familiar');
-        const fSim = fams.filter(i => i.contribuiu === 'Sim').length;
-        const fNao = fams.filter(i => i.contribuiu === 'Não').length;
-        criarOuAtualizarGrafico('famContribChart', 'pie', 'Contribuição Familiar', ['Contribui', 'Não Contribui'], [fSim, fNao], ['#8e44ad', '#ecf0f1']);
-    };
-
-    function criarOuAtualizarGrafico(id, type, label, labels, data, colors) {
-        const canvas = document.getElementById(id);
-        if (!canvas) return;
-        const ctx = canvas.getContext('2d');
-
-        if (charts[id]) charts[id].destroy();
-        
-        const dataValuePlugin = {
-            id: 'dataValuePlugin',
-            afterDatasetsDraw(chart) {
-                const { ctx } = chart;
-                ctx.save();
-                ctx.font = 'bold 14px Arial';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-                chart.data.datasets.forEach((dataset, i) => {
-                    const total = dataset.data.reduce((acc, val) => acc + val, 0);
-                    chart.getDatasetMeta(i).data.forEach((element, index) => {
-                        const value = dataset.data[index];
-                        if (value === 0) return;
-                        const percentage = total > 0 ? ((value / total) * 100).toFixed(1) + '%' : '';
-                        const text = `${value} (${percentage})`;
-                        let x, y;
-                        if (type === 'bar') {
-                            ctx.fillStyle = '#333';
-                            x = element.x;
-                            y = element.y - 15;
-                        } else {
-                            const { x: centerX, y: centerY } = element.tooltipPosition();
-                            ctx.fillStyle = '#fff';
-                            x = centerX;
-                            y = centerY;
-                        }
-                        ctx.fillText(text, x, y);
-                    });
-                });
-                ctx.restore();
-            }
-        };
-
-        charts[id] = new Chart(ctx, {
-            type: type,
-            data: {
-                labels: labels,
-                datasets: [{ label: label, data: data, backgroundColor: colors, borderWidth: 1, borderColor: '#fff' }]
-            },
-            plugins: [dataValuePlugin],
-            options: { 
-                responsive: true, 
-                maintainAspectRatio: false, 
-                animation: { duration: 0 },
-                plugins: {
-                    title: { display: true, text: label, font: { size: 18, weight: 'bold' }, padding: { top: 10, bottom: 30 } },
-                    legend: { display: true, position: 'bottom', labels: { font: { size: 14 } } }
-                },
-                scales: type === 'bar' ? { y: { beginAtZero: true, grace: '15%', ticks: { precision: 0 } } } : {}
-            }
-        });
+    if (!perfil) {
+        divDetalhe.style.display = 'none';
+        camposComuns.style.display = 'none';
+        return;
     }
 
-    window.limparDados = function() {
-        if (prompt("?") === SENHA_MESTRA && confirm("Apagar histórico na nuvem permanentemente?")) {
-            remove(pesquisasRef).then(() => {
-                alert("Banco de dados limpo!");
-                db = [];
-                window.atualizarInterface();
-            });
-        }
+    divDetalhe.style.display = 'block';
+    camposComuns.style.display = 'block';
+    selectDetalhe.innerHTML = '<option value="">--</option>';
+
+    if (perfil === 'Esposo' || perfil === 'Familiar') {
+        grupoAjuda.style.display = 'none';
+        grupoHoras.style.display = 'none';
+    } else {
+        grupoAjuda.style.display = 'block';
+        grupoHoras.style.display = 'block';
+    }
+
+    if (perfil === 'Esposa') {
+        labelDetalhe.innerText = "Tipo de Jornada:";
+        ["Trabalha fora e no lar", "Somente no lar"].forEach(o => selectDetalhe.add(new Option(o, o)));
+    } else if (perfil === 'Autonoma') {
+        labelDetalhe.innerText = "Tipo de Jornada:";
+        selectDetalhe.add(new Option("Gestão exclusiva e autônoma do lar", "Gestão Autônoma"));
+    } else if (perfil === 'Esposo') {
+        labelDetalhe.innerText = "Papel:";
+        selectDetalhe.add(new Option("Cônjuge", "Cônjuge"));
+    } else {
+        labelDetalhe.innerText = "Grau:";
+        selectDetalhe.add(new Option("Familiar Próximo", "Familiar"));
+    }
+};
+
+window.toggleRelatorio = function() {
+    const pass = prompt("Senha:");
+    const area = document.getElementById('areaResultados');
+    if (pass === SENHA_MESTRA) {
+        area.style.display = (area.style.display === 'none' || area.style.display === '') ? 'block' : 'none';
+        if(area.style.display === 'block') window.atualizarInterface();
+    } else if (pass !== null) alert("Código incorreto.");
+};
+
+window.salvarPesquisa = function() {
+    const perfilSelect = document.getElementById('perfil');
+    if (!perfilSelect.value) return alert("Selecione o perfil.");
+
+    let registro = {
+        perfil: perfilSelect.value,
+        detalhe: document.getElementById('valorDetalhe').value,
+        recebeuAjuda: document.getElementById('recebeAjuda').value,
+        contribuiu: document.getElementById('contribuiTarefa').value,
+        horas: document.getElementById('horasGeral').value,
+        data: new Date().toISOString().split('T')[0]
     };
+
+    push(pesquisasRef, registro).then(() => {
+        alert("Dados salvos na nuvem!");
+        perfilSelect.value = "";
+        document.getElementById('recebeAjuda').value = "";
+        document.getElementById('contribuiTarefa').value = "";
+        document.getElementById('horasGeral').value = "";
+        window.toggleFields();
+    });
+};
+
+window.atualizarInterface = function() {
+    const corpo = document.getElementById('corpoTabela');
+    if (!corpo) return;
+    corpo.innerHTML = "";
+    
+    const filtro = document.getElementById('filtroAtividade').value;
+    const filtroData = document.getElementById('filtroData').value;
+    
+    document.getElementById('tituloData').innerText = `Participação em: ${filtroData.split('-').reverse().join('/')}`;
+
+    const dadosNaData = db.filter(i => i.data === filtroData);
+    document.getElementById('totalDataCount').innerText = dadosNaData.length;
+    document.getElementById('dataM').innerText = dadosNaData.filter(i => i.perfil === 'Esposa').length;
+    document.getElementById('dataA').innerText = dadosNaData.filter(i => i.perfil === 'Autonoma').length;
+    document.getElementById('dataH').innerText = dadosNaData.filter(i => i.perfil === 'Esposo').length;
+    document.getElementById('dataF').innerText = dadosNaData.filter(i => i.perfil === 'Familiar').length;
+    
+    const dadosFiltrados = filtro === "Todos" ? db : db.filter(i => i.detalhe === filtro);
+    const categorias = [
+        { label: "Esposa", key: 'Esposa' },
+        { label: "Autônoma", key: 'Autonoma' },
+        { label: "Esposo", key: 'Esposo' },
+        { label: "Familiares", key: 'Familiar' }
+    ];
+
+    let counts = [];
+    categorias.forEach(cat => {
+        const itens = dadosFiltrados.filter(i => i.perfil === cat.key);
+        counts.push(itens.length);
+        corpo.innerHTML += `<tr>
+            <td style="text-align:left;"><b>${cat.label}</b></td>
+            <td>${itens.filter(i => i.recebeuAjuda === 'Sim').length}</td>
+            <td>${itens.filter(i => i.contribuiu === 'Sim').length}</td>
+            <td>${itens.filter(i => i.horas === 'Até 8h').length}</td>
+            <td>${itens.filter(i => i.horas === '8h até 14h').length}</td>
+            <td>${itens.filter(i => i.horas === 'Mais de 14h').length}</td>
+            <td style="background:#eee;"><b>${itens.length}</b></td>
+        </tr>`;
+    });
+
+    document.getElementById('totalM').innerText = db.filter(i => i.perfil === 'Esposa').length;
+    document.getElementById('totalA').innerText = db.filter(i => i.perfil === 'Autonoma').length;
+    document.getElementById('totalH').innerText = db.filter(i => i.perfil === 'Esposo').length;
+    document.getElementById('totalF').innerText = db.filter(i => i.perfil === 'Familiar').length;
+
+    window.gerarGraficos(categorias.map(c => c.label), counts, dadosFiltrados);
+};
+
+window.gerarGraficos = function(labelsPerfis, dadosPerfis, dataSet) {
+    const cores = ['#3498db', '#2ecc71', '#e67e22', '#9b59b6'];
+    
+    criarOuAtualizarGrafico('barChart', 'bar', 'Total por Perfil', labelsPerfis, dadosPerfis, cores);
+    criarOuAtualizarGrafico('pieChart', 'pie', 'Distribuição', labelsPerfis, dadosPerfis, cores);
+
+    const h = [
+        dataSet.filter(i => i.horas === 'Até 8h').length,
+        dataSet.filter(i => i.horas === '8h até 14h').length,
+        dataSet.filter(i => i.horas === 'Mais de 14h').length
+    ];
+    criarOuAtualizarGrafico('hoursChart', 'bar', 'Horas (Mulheres)', ['Até 8h', '8h-14h', '+14h'], h, ['#1abc9c', '#f39c12', '#c0392b']);
+
+    const contrib = (p) => [
+        dataSet.filter(i => i.perfil === p && i.contribuiu === 'Sim').length,
+        dataSet.filter(i => i.perfil === p && i.contribuiu === 'Não').length
+    ];
+
+    criarOuAtualizarGrafico('womenContribChart', 'pie', 'Contrib. Mulheres', ['Sim', 'Não'], contrib('Esposa'), ['#e91e63', '#ddd']);
+    criarOuAtualizarGrafico('menContribChart', 'pie', 'Contrib. Esposos', ['Sim', 'Não'], contrib('Esposo'), ['#2980b9', '#ddd']);
+    criarOuAtualizarGrafico('famContribChart', 'pie', 'Contrib. Familiares', ['Sim', 'Não'], contrib('Familiar'), ['#8e44ad', '#ddd']);
+};
+
+function criarOuAtualizarGrafico(id, type, label, labels, data, colors) {
+    const canvas = document.getElementById(id);
+    if (!canvas) return;
+    if (charts[id]) charts[id].destroy();
+    charts[id] = new Chart(canvas.getContext('2d'), {
+        type: type,
+        data: { labels: labels, datasets: [{ label: label, data: data, backgroundColor: colors }] },
+        options: { responsive: true, maintainAspectRatio: false, animation: false }
+    });
+}
+
+window.limparDados = function() {
+    if (prompt("Senha?") === SENHA_MESTRA && confirm("Apagar tudo?")) {
+        remove(pesquisasRef).then(() => { location.reload(); });
+    }
+};
 </script>
 </body>
 </html>
